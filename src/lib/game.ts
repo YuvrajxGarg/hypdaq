@@ -241,5 +241,7 @@ export const fmtX = (m: number) => `${m >= 10 ? m.toFixed(0) : m.toFixed(1)}×`;
 export function fmtAge(h: number): string {
   if (h < 1) return `${Math.max(1, Math.round(h * 60))}m`;
   if (h < 48) return `${Math.floor(h)}h`;
-  return `${Math.floor(h / 24)}d`;
+  if (h < 24 * 60) return `${Math.floor(h / 24)}d`;
+  if (h < 24 * 730) return `${Math.floor(h / 24 / 30)}mo`;
+  return `${Math.floor(h / 24 / 365)}y`;
 }

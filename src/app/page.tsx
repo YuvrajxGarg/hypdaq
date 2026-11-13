@@ -39,6 +39,7 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [sheet, setSheet] = useState<{ id: string; side: "buy" | "sell" } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null); // a just-listed post to open once it's in the market
 
   useEffect(() => {
     setMounted(true);
@@ -107,6 +108,10 @@ export default function Home() {
     else setPost(id);
     window.scrollTo({ top: 0 });
   };
+
+  useEffect(() => {
+    if (pending && snaps.has(pending)) { openListing(pending); setPending(null); }
+  }, [pending, snaps]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const actions: Actions = {
     buy: (s, n, call) => {
@@ -189,7 +194,7 @@ export default function Home() {
         <XFeed items={feed} trending={dedupe(sortFeed(byApp.x, "Rising")).slice(0, 5)} sort={sorts.x} setSort={setSort} state={state} detail={postSnap}
           open={(id) => { setPost(id); window.scrollTo({ top: 0 }); }} back={() => setPost(null)} onTrade={trade} />
       )}
-      {page === "list" && <ListPost all={listings} state={state} now={now} update={update} onListed={(id) => { toast("Listed. You hold 20 founder shares."); openListing(id); }} />}
+      {page === "list" && <ListPost all={listings} state={state} now={now} update={update} onListed={(id) => { toast("Listed. You hold 20 founder shares."); setPending(id); }} />}
       {page === "portfolio" && <Portfolio snaps={snaps} state={state} update={update} reset={reset} open={openListing} />}
       {page === "leaders" && <Leaders state={state} snaps={snaps} day={istDay(now)} />}
       {page === "insights" && <Insights now={now} />}
