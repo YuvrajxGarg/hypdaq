@@ -26,7 +26,7 @@ export function Portfolio({ snaps, state, update, reset, open }: {
 
   return (
     <div className="page">
-      <div className="hero"><div><h1>Your <em>book.</em></h1><p className="sub">Positions, settled markets and your scouting record.</p></div></div>
+      <div className="page-head"><h1>Your book.</h1><p>Positions, settled markets and your scouting record.</p></div>
       <div className="kpis">
         <div className="kpi"><div className="k">Coins</div><div className="v num">{Math.round(state.coins)}</div><div className="s">+200 every day you play</div></div>
         <div className="kpi"><div className="k">Open positions</div><div className="v num">{Math.round(marked)}</div><div className="s">at current prices</div></div>
@@ -38,7 +38,7 @@ export function Portfolio({ snaps, state, update, reset, open }: {
       <Section title="Settled" empty="Nothing settled yet. Markets settle 7 days after listing." rows={done} state={state} open={open} />
 
       <div className="section">
-        <h2>Demo clock <span className="badge ghost">prototype only</span></h2>
+        <h2>Demo clock <span className="dim" style={{ fontWeight: 400, fontSize: 12 }}>prototype only</span></h2>
         <p className="hint" style={{ marginBottom: 10 }}>Markets take days to play out. Jump ahead to watch your positions move and settle. {state.clockH ? `Currently +${state.clockH}h.` : ""}</p>
         <div className="quick">
           <button className="btn small" onClick={() => ff(6)}>+6 hours</button>
@@ -110,7 +110,7 @@ export function Leaders({ state, snaps, day }: { state: State; snaps: Map<string
   const sorted = [...all].sort((a, b) => (b[key] as number) - (a[key] as number));
   return (
     <div className="page">
-      <div className="hero"><div><h1>Who called it <em>first.</em></h1><p className="sub">This week. Other players are sample data until accounts go live.</p></div></div>
+      <div className="page-head"><h1>Who called it first.</h1><p>This week. Other players are sample data until accounts go live.</p></div>
       <div className="quick" style={{ marginBottom: 14 }}>
         {(["traders", "scouts", "calls"] as const).map((t) => <button key={t} className={`pill ${tab === t ? "on" : ""}`} onClick={() => setTab(t)}>{t === "traders" ? "Top traders" : t === "scouts" ? "Best scouts" : "Sharpest calls"}</button>)}
       </div>
@@ -157,7 +157,7 @@ export function Insights({ now }: { now: number }) {
 
   return (
     <div className="page">
-      <div className="hero"><div><h1>What&apos;s <em>working.</em></h1><p className="sub">For creators and agencies: what grows after it gets spotted, by platform, niche, format and timing. And where the crowd gets it wrong.</p></div></div>
+      <div className="page-head"><h1>What&apos;s working.</h1><p>For creators and agencies: what grows after it gets spotted, by platform, niche, format and timing. And where the crowd gets it wrong.</p></div>
       <div className="mock-note" style={{ maxWidth: "none", marginBottom: 18 }}>
         Sample data: computed from {hist.length} simulated settled listings. Once live, these numbers come from real listed posts, the tags scouts add, and real trades.
       </div>

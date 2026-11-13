@@ -59,11 +59,9 @@ export function ListPost({ all, state, now, update, onListed }: {
 
   return (
     <div className="page">
-      <div className="hero">
-        <div>
-          <h1>Spotted one <em>early?</em></h1>
-          <p className="sub">List any public reel, YouTube video or X post you think will blow up. You get {SCOUT_SHARES} founder shares free, so the earlier you find it, the more it pays.</p>
-        </div>
+      <div className="page-head">
+          <h1>Spotted one early?</h1>
+          <p>List any public reel, YouTube video or X post you think will blow up. You get {SCOUT_SHARES} founder shares free, so the earlier you find it, the more it pays.</p>
       </div>
       <div className="two" style={{ alignItems: "start" }}>
         <div className="form">
@@ -116,10 +114,10 @@ export function ListPost({ all, state, now, update, onListed }: {
             )}
           </div>
           {err && <p className="err">{err}</p>}
-          <button className="btn primary block" onClick={submit}>List it · get {SCOUT_SHARES} founder shares</button>
+          <button className="btn red block" onClick={submit}>List it · get {SCOUT_SHARES} founder shares</button>
           <p className="dim" style={{ fontSize: 12 }}>{today}/{MAX_LISTINGS_PER_DAY} listings used today. The tags you add power Insights for everyone.</p>
         </div>
-        <div className="rules" style={{ gridTemplateColumns: "1fr" }}>
+        <div className="rules panel">
           <div><b>Fresh posts only</b>Posts must be under {MAX_POST_AGE_H}h old when listed. No listing things that already went viral.</div>
           <div><b>One market per post</b>Each post can be listed once. If it&apos;s already there, buy in from the feed.</div>
           <div><b>Founder shares are locked</b>Your {SCOUT_SHARES} free shares can&apos;t be sold until settlement, so scouts can&apos;t list and dump.</div>

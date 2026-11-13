@@ -5,9 +5,11 @@ everyone trades them in a Reels-style feed. A Revolio Labs prototype in the SLAN
 
 ## How it plays
 
-- **Feed**: full-screen, vertical scroll like Reels. The right rail is the market: ticker, price, 24h change, Buy, Sell,
-  growth since listing. The post's own numbers (views, likes, comments, shares) sit in a small strip under the caption.
-  Filters: For you / New / Rising / Settled, and All / Reels / YouTube / X.
+- **Three apps, each in its own native layout** (switch at the top, or the bottom bar on phones):
+  - Reels: full-screen vertical feed. The right rail shows price, holders and growth; one red Buy pill by the creator.
+  - YouTube: home grid with a price badge on each thumbnail; tap for a watch page with Buy/Sell and the market.
+  - X: a timeline of posts with a small market row under each; tap for the post page and chart.
+  Tabs: For you / New / Rising / Ended.
 - **List a post**: paste a link to any public post under 24h old. One market per post, 3 listings a day. The scout gets
   20 founder shares free, locked until settlement, so finding a sleeper early pays and listing-then-dumping doesn't.
 - **Price**: a bonding curve. Price = 1 + 0.0025 × shares outstanding, so every buy pushes it up and early buyers pay less.

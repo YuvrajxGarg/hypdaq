@@ -1,34 +1,44 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DAILY_COINS, GAME, H, Listing, MAX_SHARES_PER_TRADE, marketListings, shareValue, simulate, ticker } from "@/lib/game";
 import { PlatformId } from "@/lib/platforms";
 import { Snap, snapshot } from "@/lib/market";
 import { useGameState } from "@/lib/store";
-import { Actions, Details, Slide, TradeSheet } from "@/components/Feed";
+import { Actions, I, Sort, TradeSheet } from "@/components/Market";
+import { Reels } from "@/components/Reels";
+import { Watch, YouTubeHome } from "@/components/YouTube";
+import { XFeed } from "@/components/XFeed";
 import { ListPost } from "@/components/ListPost";
 import { Insights, Leaders, Portfolio } from "@/components/Pages";
 
-const TABS = ["Feed", "List a post", "Portfolio", "Leaders", "Insights"] as const;
-type Tab = (typeof TABS)[number];
-const SORTS = ["For you", "New", "Rising", "Settled"] as const;
-type Sort = (typeof SORTS)[number];
-const PLATS: { id: PlatformId | "all"; label: string }[] = [
-  { id: "all", label: "All" }, { id: "reels", label: "Reels" }, { id: "youtube", label: "YouTube" }, { id: "x", label: "X" },
+type Page = null | "list" | "portfolio" | "leaders" | "insights";
+const APPS: { id: PlatformId; label: string; icon: (s?: number) => React.ReactNode }[] = [
+  { id: "reels", label: "Reels", icon: I.reels }, { id: "youtube", label: "YouTube", icon: I.yt }, { id: "x", label: "X", icon: I.x },
 ];
 const istDay = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(ms));
+const live = (s: Snap) => s.status === "open" || s.status === "closed";
+
+function sortFeed(xs: Snap[], sort: Sort) {
+  if (sort === "New") return xs.filter((s) => s.status === "open").sort((a, b) => b.l.listedAt - a.l.listedAt);
+  if (sort === "Rising") return xs.filter(live).sort((a, b) => b.change - a.change);
+  if (sort === "Ended") return xs.filter((s) => !live(s)).sort((a, b) => b.l.listedAt - a.l.listedAt);
+  const score = (s: Snap) => (s.status === "open" ? 20 : 10) + Math.log10(1 + s.growth) * 2 + s.l.heat - s.t / 48 + (s.l.mine ? 5 : 0);
+  return xs.filter(live).sort((a, b) => score(b) - score(a));
+}
 
 export default function Home() {
   const { state, update, ready, reset } = useGameState();
-  const [tab, setTab] = useState<Tab>("Feed");
-  const [sort, setSort] = useState<Sort>("For you");
-  const [plat, setPlat] = useState<PlatformId | "all">("all");
+  const [app, setApp] = useState<PlatformId>("reels");
+  const [page, setPage] = useState<Page>(null);
+  const [sorts, setSorts] = useState<Record<PlatformId, Sort>>({ reels: "For you", youtube: "For you", x: "For you" });
+  const [watch, setWatch] = useState<string | null>(null); // YouTube watch page
+  const [post, setPost] = useState<string | null>(null); // X post page
+  const [focus, setFocus] = useState<string | null>(null); // Reels: scroll to
+  const [menu, setMenu] = useState(false);
   const [tick, setTick] = useState(0);
   const [mounted, setMounted] = useState(false);
-  const [sheet, setSheet] = useState<{ id: string; side: "buy" | "sell" | "details" } | null>(null);
-  const [active, setActive] = useState(0);
-  const [focus, setFocus] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<{ id: string; side: "buy" | "sell" } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -40,8 +50,7 @@ export default function Home() {
 
   const listings: Listing[] = useMemo(() => {
     if (!mounted) return [];
-    const mine = state.myListings.map((m) => simulate(m));
-    return [...mine, ...marketListings(now)];
+    return [...state.myListings.map((m) => simulate(m)), ...marketListings(now)];
   }, [mounted, now, state.myListings]);
   const snaps = useMemo(() => new Map(listings.map((l) => [l.id, snapshot(l, state, now)] as [string, Snap])), [listings, state, now]);
 
@@ -58,42 +67,45 @@ export default function Home() {
     }
     const drip = state.lastDrip !== today;
     if (!drip && !Object.keys(due).length) return;
-    update((st) => ({
-      ...st,
-      coins: st.coins + Object.values(due).reduce((a, b) => a + b, 0) + (drip && st.lastDrip ? DAILY_COINS : 0),
-      lastDrip: today,
-      paid: { ...st.paid, ...due },
-    }));
-    if (Object.keys(due).length) toast(`${Object.keys(due).length} market${Object.keys(due).length > 1 ? "s" : ""} settled · +${Math.round(Object.values(due).reduce((a, b) => a + b, 0))} coins`);
+    const total = Object.values(due).reduce((a, b) => a + b, 0);
+    update((st) => ({ ...st, coins: st.coins + total + (drip && st.lastDrip ? DAILY_COINS : 0), lastDrip: today, paid: { ...st.paid, ...due } }));
+    const n = Object.keys(due).length;
+    if (n) toast(`${n} market${n > 1 ? "s" : ""} settled · +${Math.round(total)} coins`);
   }, [ready, mounted, now, snaps, state.holdings, state.paid, state.lastDrip, update, toast]);
 
-  const feed = useMemo(() => {
-    let xs = [...snaps.values()].filter((s) => plat === "all" || s.l.platform === plat);
-    const live = (s: Snap) => s.status === "open" || s.status === "closed";
-    if (sort === "New") xs = xs.filter((s) => s.status === "open").sort((a, b) => b.l.listedAt - a.l.listedAt);
-    else if (sort === "Rising") xs = xs.filter(live).sort((a, b) => b.change - a.change);
-    else if (sort === "Settled") xs = xs.filter((s) => !live(s)).sort((a, b) => b.l.listedAt - a.l.listedAt);
-    else {
-      const score = (s: Snap) => (s.status === "open" ? 2 : live(s) ? 1 : 0) * 10 + Math.log10(1 + s.growth) * 2 + s.l.heat - s.t / 48 + (s.l.mine ? 5 : 0);
-      xs = xs.filter(live).sort((a, b) => score(b) - score(a));
-    }
-    return xs;
-  }, [snaps, sort, plat]);
+  const byApp = useMemo(() => {
+    const out = { reels: [] as Snap[], youtube: [] as Snap[], x: [] as Snap[] };
+    for (const s of snaps.values()) out[s.l.platform].push(s);
+    return out;
+  }, [snaps]);
+  // the sample catalog repeats captions; show each caption once unless you hold it
+  const dedupe = useCallback((xs: Snap[]) => {
+    const seen = new Set<string>();
+    return xs.filter((s) => {
+      if (s.l.mine || state.holdings[s.l.id]) return true;
+      if (seen.has(s.l.title)) return false;
+      seen.add(s.l.title);
+      return true;
+    });
+  }, [state.holdings]);
+  const feed = useMemo(() => dedupe(sortFeed(byApp[app], sorts[app])), [byApp, app, sorts, dedupe]);
 
-  useEffect(() => {
-    if (!focus || tab !== "Feed") return;
-    const i = feed.findIndex((s) => s.l.id === focus);
-    const el = feedRef.current;
-    if (i >= 0 && el) { el.scrollTo({ top: i * el.clientHeight }); setActive(i); }
-    setFocus(null);
-  }, [focus, feed, tab]);
+  const setSort = (s: Sort) => { setSorts((x) => ({ ...x, [app]: s })); setFocus(null); };
+  const goApp = (a: PlatformId) => { setApp(a); setPage(null); setWatch(null); setPost(null); setMenu(false); window.scrollTo({ top: 0 }); };
+  const go = (p: Page) => { setPage(p); setMenu(false); window.scrollTo({ top: 0 }); };
 
   const openListing = (id: string) => {
     const s = snaps.get(id);
-    setSort(s && (s.status === "settled" || s.status === "void") ? "Settled" : "New");
-    setPlat("all");
-    setTab("Feed");
-    setFocus(id);
+    if (!s) return;
+    const a = s.l.platform;
+    setApp(a); setPage(null); setMenu(false);
+    if (a === "reels") {
+      const ended = !live(s);
+      setSorts((x) => ({ ...x, reels: ended ? "Ended" : s.status === "open" ? "New" : "For you" }));
+      setFocus(id);
+    } else if (a === "youtube") setWatch(id);
+    else setPost(id);
+    window.scrollTo({ top: 0 });
   };
 
   const actions: Actions = {
@@ -134,64 +146,61 @@ export default function Home() {
   };
 
   if (!mounted || !ready) return <div style={{ minHeight: "100vh" }} />;
-  const cur = feed[Math.min(active, feed.length - 1)];
+  const trade = (id: string, side: "buy" | "sell") => setSheet({ id, side });
   const sheetSnap = sheet ? snaps.get(sheet.id) : undefined;
+  const watchSnap = watch ? snaps.get(watch) : undefined;
+  const postSnap = post ? snaps.get(post) ?? null : null;
+  const pageLabel = { list: "List a post", portfolio: "Portfolio", leaders: "Leaders", insights: "Insights" } as const;
 
   return (
     <>
       <header className="top">
         <div className="top-in">
-          <div className="brand"><span className="brand-dot" />{GAME}</div>
-          <nav className="tabs">
-            {TABS.map((t) => <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)}>{t}</button>)}
+          <button className="brand" onClick={() => goApp(app)}><span className="brand-dot" />{GAME}<small title="Posts, numbers and other players are simulated in this prototype">sample data</small></button>
+          <nav className="apps">
+            {APPS.map((a) => <button key={a.id} className={`app-tab ${!page && app === a.id ? "on" : ""}`} onClick={() => goApp(a.id)}>{a.icon(16)}{a.label}</button>)}
           </nav>
-          <div className="wallet">
-            <span className="chip red" title="Posts, numbers and other players are simulated in this prototype">Sample data</span>
-            <span className="chip">Coins <b className="num">{Math.round(state.coins)}</b></span>
+          <div className="right">
+            <button className="ghost" onClick={() => go("list")}>{I.plus(16)}List</button>
+            <span className="coins"><i /><b className="num">{Math.round(state.coins)}</b></span>
+            <button className="avatar-btn" onClick={() => setMenu((m) => !m)} aria-label="Menu">You</button>
           </div>
         </div>
       </header>
 
-      {tab === "Feed" && (
-        <main className="app-main">
-          <div className="filters">
-            {SORTS.map((s) => <button key={s} className={`pill ${sort === s ? "on" : ""}`} onClick={() => { setSort(s); setActive(0); feedRef.current?.scrollTo({ top: 0 }); }}>{s}</button>)}
-            <span className="pill sep">|</span>
-            {PLATS.map((p) => <button key={p.id} className={`pill ${plat === p.id ? "on" : ""}`} onClick={() => { setPlat(p.id); setActive(0); feedRef.current?.scrollTo({ top: 0 }); }}>{p.label}</button>)}
-          </div>
-          <div className="feed" ref={feedRef} onScroll={(e) => setActive(Math.round(e.currentTarget.scrollTop / e.currentTarget.clientHeight))}>
-            {feed.map((s) => (
-              <section className="slide" key={s.l.id} id={`post-${s.l.id}`}>
-                <Slide s={s} state={state} onTrade={(side) => setSheet({ id: s.l.id, side })} onDetails={() => setSheet({ id: s.l.id, side: window.innerWidth > 1000 ? (s.canBuy ? "buy" : "details") : "details" })} />
-                <aside className="side-panel">{cur && cur.l.id === s.l.id && <Details s={s} state={state} />}</aside>
-              </section>
-            ))}
-            <div className="end-card">
-              <div>
-                <p style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>You&apos;re all caught up.</p>
-                <p>Seen something that should be here?</p>
-                <button className="btn primary" style={{ marginTop: 14 }} onClick={() => setTab("List a post")}>List a post</button>
-              </div>
-            </div>
-          </div>
-        </main>
-      )}
-      {tab === "List a post" && <ListPost all={listings} state={state} now={now} update={update} onListed={(id) => { toast("Listed. You hold 20 founder shares."); openListing(id); }} />}
-      {tab === "Portfolio" && <Portfolio snaps={snaps} state={state} update={update} reset={reset} open={openListing} />}
-      {tab === "Leaders" && <Leaders state={state} snaps={snaps} day={istDay(now)} />}
-      {tab === "Insights" && <Insights now={now} />}
-
-      {sheet && sheetSnap && sheet.side !== "details" && <TradeSheet key={sheet.id + sheet.side} s={sheetSnap} side={sheet.side} state={state} actions={actions} onClose={() => setSheet(null)} />}
-      {sheet && sheetSnap && sheet.side === "details" && (
+      {menu && (
         <>
-          <div className="scrim" onClick={() => setSheet(null)} />
-          <div className="sheet" role="dialog" aria-label="Market details">
-            <div className="grab" />
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}><Details s={sheetSnap} state={state} /></div>
-            {sheetSnap.canBuy && <button className="btn primary block" style={{ marginTop: 14 }} onClick={() => setSheet({ id: sheet.id, side: "buy" })}>Buy</button>}
+          <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 45 }} />
+          <div className="menu">
+            <button onClick={() => go("portfolio")}>Portfolio</button>
+            <button onClick={() => go("leaders")}>Leaders</button>
+            <button onClick={() => go("insights")}>Insights</button>
+            <button onClick={() => go("list")}>List a post</button>
+            <div className="note">Sample data. Posts, numbers and other players are simulated until live data is connected. Play money only.</div>
           </div>
         </>
       )}
+
+      {!page && app === "reels" && <Reels feed={feed} sort={sorts.reels} setSort={setSort} state={state} focus={focus} onTrade={trade} onList={() => go("list")} />}
+      {!page && app === "youtube" && (watchSnap
+        ? <Watch s={watchSnap} next={feed.filter((s) => s.l.id !== watch).slice(0, 12)} state={state} onTrade={(side) => trade(watchSnap.l.id, side)} open={(id) => { setWatch(id); window.scrollTo({ top: 0 }); }} back={() => setWatch(null)} />
+        : <YouTubeHome items={feed} sort={sorts.youtube} setSort={setSort} open={(id) => { setWatch(id); window.scrollTo({ top: 0 }); }} />)}
+      {!page && app === "x" && (
+        <XFeed items={feed} trending={dedupe(sortFeed(byApp.x, "Rising")).slice(0, 5)} sort={sorts.x} setSort={setSort} state={state} detail={postSnap}
+          open={(id) => { setPost(id); window.scrollTo({ top: 0 }); }} back={() => setPost(null)} onTrade={trade} />
+      )}
+      {page === "list" && <ListPost all={listings} state={state} now={now} update={update} onListed={(id) => { toast("Listed. You hold 20 founder shares."); openListing(id); }} />}
+      {page === "portfolio" && <Portfolio snaps={snaps} state={state} update={update} reset={reset} open={openListing} />}
+      {page === "leaders" && <Leaders state={state} snaps={snaps} day={istDay(now)} />}
+      {page === "insights" && <Insights now={now} />}
+
+      <nav className="bottom-nav">
+        {APPS.map((a) => <button key={a.id} className={!page && app === a.id ? "on" : ""} onClick={() => goApp(a.id)}>{a.icon(22)}{a.label}</button>)}
+        <button className={page === "list" ? "on" : ""} onClick={() => go("list")}>{I.plus(22)}List</button>
+        <button className={page && page !== "list" ? "on" : ""} onClick={() => setMenu((m) => !m)}>{I.user(22)}{page && page !== "list" ? pageLabel[page] : "You"}</button>
+      </nav>
+
+      {sheet && sheetSnap && <TradeSheet key={sheet.id + sheet.side} s={sheetSnap} side={sheet.side} state={state} actions={actions} onClose={() => setSheet(null)} />}
       {msg && <div className="toast">{msg}</div>}
     </>
   );
