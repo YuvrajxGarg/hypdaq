@@ -10,7 +10,7 @@ everyone trades them in a Reels-style feed. A Revolio Labs prototype in the SLAN
   - YouTube: home grid with a price badge on each thumbnail; tap for a watch page with Buy/Sell and the market.
   - X: a timeline of posts with a small market row under each; tap for the post page and chart.
   Tabs: For you / New / Rising / Ended.
-- **List a post**: paste a link to any public post under 24h old. One market per post, 3 listings a day. The scout gets
+- **List a post**: paste a link, nothing else. Post time is read from the link (X and Instagram ids encode it; YouTube from its page), title and creator from free public oEmbed. Must be under 24h old. One market per post, 3 listings a day. The scout gets
   20 founder shares free, locked until settlement, so finding a sleeper early pays and listing-then-dumping doesn't.
 - **Price**: a bonding curve. Price = 1 + 0.0025 × shares outstanding, so every buy pushes it up and early buyers pay less.
   Sell back to the curve any time before settlement. Buying closes 3 days after listing; max 200 shares per trade.

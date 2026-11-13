@@ -10,4 +10,5 @@ Read `README.md` for rules, scoring and what is mocked.
 - Own GitHub repo (`YuvrajxGarg/hypdaq`) and own Vercel project (`hypdaq`). Not part of revolio-labs or revolio-studio-2.
 - Production deploys from `main` only; other branches are skipped by `vercel.json`. Batch changes so each merge is one deploy.
 - Look: black with red `#ff2a2a` accent, Geist Sans/Mono, no images or AI art. Keep it minimal: one Buy action per post, details on tap.
-- UI: `src/app/page.tsx` (shell + routing), `components/Market.tsx` (market box, trade sheet, icons), `Reels.tsx`, `YouTube.tsx`, `XFeed.tsx`.
+- UI: `src/app/page.tsx` (routing), `components/Shell.tsx` (ticker tape, sidebar, account dock, You hub), `Market.tsx` (market box, trade sheet, icons), `fx.tsx` (rolling numbers, chips, trade burst), `Reels.tsx`, `YouTube.tsx`, `XFeed.tsx`.
+- Listing is link-only: `src/lib/postTime.ts` reads post time from X/Instagram ids; `/api/peek` reads title/creator (YouTube + X oEmbed, Instagram page meta) and YouTube upload time. Cloud sessions cannot reach those hosts; it works on Vercel.

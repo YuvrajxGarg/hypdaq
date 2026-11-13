@@ -9,12 +9,8 @@ import { Reels } from "@/components/Reels";
 import { Watch, YouTubeHome } from "@/components/YouTube";
 import { XFeed } from "@/components/XFeed";
 import { ListPost } from "@/components/ListPost";
-import { Insights, Leaders, Portfolio } from "@/components/Pages";
-
-type Page = null | "list" | "portfolio" | "leaders" | "insights";
-const APPS: { id: PlatformId; label: string; icon: (s?: number) => React.ReactNode }[] = [
-  { id: "reels", label: "Reels", icon: I.reels }, { id: "youtube", label: "YouTube", icon: I.yt }, { id: "x", label: "X", icon: I.x },
-];
+import { APPS, Dock, Hub, HubTab, Page, Side, Tape } from "@/components/Shell";
+import { Num } from "@/components/fx";
 const istDay = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(ms));
 const live = (s: Snap) => s.status === "open" || s.status === "closed";
 
@@ -34,7 +30,8 @@ export default function Home() {
   const [watch, setWatch] = useState<string | null>(null); // YouTube watch page
   const [post, setPost] = useState<string | null>(null); // X post page
   const [focus, setFocus] = useState<string | null>(null); // Reels: scroll to
-  const [menu, setMenu] = useState(false);
+  const [hubTab, setHubTab] = useState<HubTab>("portfolio");
+  const [prefill, setPrefill] = useState("");
   const [tick, setTick] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [sheet, setSheet] = useState<{ id: string; side: "buy" | "sell" } | null>(null);
@@ -43,7 +40,7 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
-    const t = setInterval(() => setTick((x) => x + 1), 30_000);
+    const t = setInterval(() => setTick((x) => x + 1), 10_000);
     return () => clearInterval(t);
   }, []);
   const now = useMemo(() => Date.now() + state.clockH * H, [state.clockH, tick]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -92,14 +89,15 @@ export default function Home() {
   const feed = useMemo(() => dedupe(sortFeed(byApp[app], sorts[app])), [byApp, app, sorts, dedupe]);
 
   const setSort = (s: Sort) => { setSorts((x) => ({ ...x, [app]: s })); setFocus(null); };
-  const goApp = (a: PlatformId) => { setApp(a); setPage(null); setWatch(null); setPost(null); setMenu(false); window.scrollTo({ top: 0 }); };
-  const go = (p: Page) => { setPage(p); setMenu(false); window.scrollTo({ top: 0 }); };
+  const goApp = (a: PlatformId) => { setApp(a); setPage(null); setWatch(null); setPost(null); window.scrollTo({ top: 0 }); };
+  const go = (p: Page) => { setPage(p); if (p !== "list") setPrefill(""); window.scrollTo({ top: 0 }); };
+  const openHub = (t: HubTab) => { setHubTab(t); go("you"); };
 
   const openListing = (id: string) => {
     const s = snaps.get(id);
     if (!s) return;
     const a = s.l.platform;
-    setApp(a); setPage(null); setMenu(false);
+    setApp(a); setPage(null);
     if (a === "reels") {
       const ended = !live(s);
       setSorts((x) => ({ ...x, reels: ended ? "Ended" : s.status === "open" ? "New" : "For you" }));
@@ -128,7 +126,7 @@ export default function Home() {
           trades: [...st.trades, { listingId: s.l.id, side: "buy", shares: n, coins: cost, at: now }],
         };
       });
-      toast(`Bought ${n} $${ticker(s.l)} for ${Math.round(cost)}`);
+      toast(`Bought ${n} $${ticker(s.l)} · ${Math.round(cost)} coins`);
       return null;
     },
     sell: (s, n) => {
@@ -145,68 +143,60 @@ export default function Home() {
         else holdings[s.l.id] = { ...cur, shares: left, cost: cur.cost * (left / cur.shares) };
         return { ...st, coins: st.coins + back, holdings, trades: [...st.trades, { listingId: s.l.id, side: "sell", shares: n, coins: back, at: now }] };
       });
-      toast(`Sold ${n} for ${Math.round(back)}`);
+      toast(`Sold ${n} $${ticker(s.l)} · +${Math.round(back)} coins`);
       return null;
     },
   };
 
-  if (!mounted || !ready) return <div style={{ minHeight: "100vh" }} />;
+  if (!mounted || !ready) return (
+    <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+        <div className="brand" style={{ padding: 0 }}><span className="brand-dot" />{GAME}</div>
+        <div className="skel" style={{ width: 140, height: 4 }} />
+      </div>
+    </div>
+  );
   const trade = (id: string, side: "buy" | "sell") => setSheet({ id, side });
   const sheetSnap = sheet ? snaps.get(sheet.id) : undefined;
   const watchSnap = watch ? snaps.get(watch) : undefined;
   const postSnap = post ? snaps.get(post) ?? null : null;
-  const pageLabel = { list: "List a post", portfolio: "Portfolio", leaders: "Leaders", insights: "Insights" } as const;
+  const day = istDay(now);
+  const tape = sortFeed([...snaps.values()], "Rising").slice(0, 18);
+  const held = Object.keys(state.holdings).filter((id) => { const x = snaps.get(id); return x && live(x); }).length;
 
   return (
     <>
-      <header className="top">
-        <div className="top-in">
-          <button className="brand" onClick={() => goApp(app)}><span className="brand-dot" />{GAME}<small title="Posts, numbers and other players are simulated in this prototype">sample data</small></button>
-          <nav className="apps">
-            {APPS.map((a) => <button key={a.id} className={`app-tab ${!page && app === a.id ? "on" : ""}`} onClick={() => goApp(a.id)}>{a.icon(16)}{a.label}</button>)}
-          </nav>
-          <div className="right">
-            <button className="ghost" onClick={() => go("list")}>{I.plus(16)}List</button>
-            <span className="coins"><i /><b className="num">{Math.round(state.coins)}</b></span>
-            <button className="avatar-btn" onClick={() => setMenu((m) => !m)} aria-label="Menu">You</button>
-          </div>
-        </div>
+      <Tape items={tape} open={openListing} />
+      <header className="mtop">
+        <button className="brand" onClick={() => goApp(app)}><span className="brand-dot" />{GAME}</button>
+        <button className="coins" onClick={() => openHub("portfolio")}><span className="coin" /><Num value={Math.round(state.coins)} fmt={(v) => v.toLocaleString("en-IN")} /></button>
       </header>
-
-      {menu && (
-        <>
-          <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 45 }} />
-          <div className="menu">
-            <button onClick={() => go("portfolio")}>Portfolio</button>
-            <button onClick={() => go("leaders")}>Leaders</button>
-            <button onClick={() => go("insights")}>Insights</button>
-            <button onClick={() => go("list")}>List a post</button>
-            <div className="note">Sample data. Posts, numbers and other players are simulated until live data is connected. Play money only.</div>
-          </div>
-        </>
-      )}
-
+      <div className="shell">
+        <Side app={app} page={page} go={go} goApp={goApp} held={held}
+          counts={{ reels: byApp.reels.filter(live).length, youtube: byApp.youtube.filter(live).length, x: byApp.x.filter(live).length }} />
+        <main className="main" key={page ?? app}>
       {!page && app === "reels" && <Reels feed={feed} sort={sorts.reels} setSort={setSort} state={state} focus={focus} onTrade={trade} onList={() => go("list")} />}
       {!page && app === "youtube" && (watchSnap
         ? <Watch s={watchSnap} next={feed.filter((s) => s.l.id !== watch).slice(0, 12)} state={state} onTrade={(side) => trade(watchSnap.l.id, side)} open={(id) => { setWatch(id); window.scrollTo({ top: 0 }); }} back={() => setWatch(null)} />
         : <YouTubeHome items={feed} sort={sorts.youtube} setSort={setSort} open={(id) => { setWatch(id); window.scrollTo({ top: 0 }); }} />)}
       {!page && app === "x" && (
-        <XFeed items={feed} trending={dedupe(sortFeed(byApp.x, "Rising")).slice(0, 5)} sort={sorts.x} setSort={setSort} state={state} detail={postSnap}
+        <XFeed items={feed} sort={sorts.x} setSort={setSort} state={state} detail={postSnap}
           open={(id) => { setPost(id); window.scrollTo({ top: 0 }); }} back={() => setPost(null)} onTrade={trade} />
       )}
-      {page === "list" && <ListPost all={listings} state={state} now={now} update={update} onListed={(id) => { toast("Listed. You hold 20 founder shares."); setPending(id); }} />}
-      {page === "portfolio" && <Portfolio snaps={snaps} state={state} update={update} reset={reset} open={openListing} />}
-      {page === "leaders" && <Leaders state={state} snaps={snaps} day={istDay(now)} />}
-      {page === "insights" && <Insights now={now} />}
+      {page === "list" && <ListPost initial={prefill} all={listings} state={state} now={now} update={update} onListed={(id) => { toast("Listed. You hold 20 founder shares."); setPending(id); }} />}
+      {page === "you" && <Hub tab={hubTab} setTab={setHubTab} state={state} snaps={snaps} day={day} now={now} update={update} reset={reset} open={openListing} />}
+        </main>
+        <Dock state={state} snaps={snaps} day={day} open={openListing} openHub={openHub} onQuickList={(l) => { setPrefill(l); go("list"); }} />
+      </div>
 
       <nav className="bottom-nav">
         {APPS.map((a) => <button key={a.id} className={!page && app === a.id ? "on" : ""} onClick={() => goApp(a.id)}>{a.icon(22)}{a.label}</button>)}
-        <button className={page === "list" ? "on" : ""} onClick={() => go("list")}>{I.plus(22)}List</button>
-        <button className={page && page !== "list" ? "on" : ""} onClick={() => setMenu((m) => !m)}>{I.user(22)}{page && page !== "list" ? pageLabel[page] : "You"}</button>
+        <button className={page === "list" ? "on" : ""} onClick={() => go("list")} aria-label="List a post"><span className="plus">{I.plus(20)}</span></button>
+        <button className={page === "you" ? "on" : ""} onClick={() => go("you")}>{I.user(22)}You</button>
       </nav>
 
       {sheet && sheetSnap && <TradeSheet key={sheet.id + sheet.side} s={sheetSnap} side={sheet.side} state={state} actions={actions} onClose={() => setSheet(null)} />}
-      {msg && <div className="toast">{msg}</div>}
+      {msg && <div className="toast" key={msg}><i>✓</i>{msg}</div>}
     </>
   );
 }

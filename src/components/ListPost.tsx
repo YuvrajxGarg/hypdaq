@@ -27,10 +27,10 @@ function guessTags(title: string, kind: string) {
   return { niche: NICHES.some((n) => n.id === niche) ? niche : "comedy", hook, format };
 }
 
-export function ListPost({ all, state, now, update, onListed }: {
-  all: Listing[]; state: State; now: number; update: (fn: (s: State) => State) => void; onListed: (id: string) => void;
+export function ListPost({ all, state, now, update, onListed, initial = "" }: {
+  all: Listing[]; state: State; now: number; update: (fn: (s: State) => State) => void; onListed: (id: string) => void; initial?: string;
 }) {
-  const [link, setLink] = useState("");
+  const [link, setLink] = useState(initial);
   const [peek, setPeek] = useState<Peek | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -98,7 +98,7 @@ export function ListPost({ all, state, now, update, onListed }: {
   };
 
   return (
-    <div className="page" style={{ maxWidth: 620 }}>
+    <div className="page page-anim" style={{ maxWidth: 640 }}>
       <div className="page-head">
         <h1>Spotted one early?</h1>
         <p>Paste a link to a reel, YouTube video or X post you think will blow up. We read the rest. You get {SCOUT_SHARES} founder shares free.</p>
@@ -117,7 +117,11 @@ export function ListPost({ all, state, now, update, onListed }: {
                 <div className="muted" style={{ fontSize: 12 }}>{platform(ok.platform).label} · {ok.kind}</div>
               </div>
             </div>
-            <p style={{ fontSize: 15, lineHeight: 1.4, color: peek.title ? "var(--text)" : "var(--muted)" }}>{peek.title ?? (loading ? "Reading the post…" : "Title not readable yet. The number checker fills it in.")}</p>
+            {loading && !peek.title ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}><div className="skel" style={{ height: 14, width: "92%" }} /><div className="skel" style={{ height: 14, width: "60%" }} /></div>
+            ) : (
+              <p style={{ fontSize: 15, lineHeight: 1.4, color: peek.title ? "var(--text)" : "var(--muted)" }}>{peek.title ?? "Title not readable yet. The number checker fills it in."}</p>
+            )}
             <div className="stat-line">
               <span>Posted <b>{ageH != null ? `${fmtAge(ageH)} ago` : loading ? "…" : "unknown"}</b></span>
               {ageH != null && <span className={tooOld ? "down" : "up"}>{tooOld ? "Too old to list" : "Fresh enough"}</span>}

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { fmtNum as fmtViews } from "@/lib/game";
 
 export function Spark({ values, w = 120, h = 32, color = "currentColor" }: { values: number[]; w?: number; h?: number; color?: string }) {
@@ -9,7 +9,7 @@ export function Spark({ values, w = 120, h = 32, color = "currentColor" }: { val
   const span = max - min || 1;
   const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - 2 - ((v - min) / span) * (h - 4)}`).join(" ");
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden style={{ overflow: "visible" }}>
       <polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
@@ -20,6 +20,8 @@ type Ref = { label: string; value: number; dashed?: boolean };
 /** Views over hours. One line; optional horizontal reference lines (your call, crowd). */
 export function ViewsChart({ points, maxH, refs = [], cutoff, fmt = fmtViews, unit = "views", yMin = 0, label = "Views over time" }: { points: { h: number; v: number }[]; maxH: number; refs?: Ref[]; cutoff?: number; fmt?: (v: number) => string; unit?: string; yMin?: number; label?: string }) {
   const [hover, setHover] = useState<number | null>(null);
+  const gid = useId().replace(/:/g, "");
+  const col = points[points.length - 1].v >= points[0].v ? "#2fe39a" : "#ff5c7a";
   const W = 500, H = 190, L = 44, R = 12, T = 12, B = 24;
   const yMax = Math.max(...points.map((p) => p.v), ...refs.map((r) => r.value), yMin + 0.5) * 1.12;
   const x = (h: number) => L + (h / maxH) * (W - L - R);
@@ -45,15 +47,22 @@ export function ViewsChart({ points, maxH, refs = [], cutoff, fmt = fmtViews, un
       >
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke="#222224" />
+            <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke="rgba(255,255,255,.06)" />
             <text x={L - 8} y={y(t) + 4} fill="#8b8b90" fontSize={10} textAnchor="end">{fmt(t)}</text>
           </g>
         ))}
         {xt.map((t) => (
           <text key={t} x={x(t)} y={H - 6} fill="#8b8b90" fontSize={10} textAnchor="middle">{t === 0 ? "0" : t >= 24 && t % 24 === 0 ? `${t / 24}d` : `${t}h`}</text>
         ))}
-        <path d={area} fill="rgba(255,42,42,.10)" />
-        <path d={d} fill="none" stroke="#ff2a2a" strokeWidth={2} strokeLinejoin="round" />
+        <defs>
+          <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={col} stopOpacity={0.28} />
+            <stop offset="1" stopColor={col} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <path d={area} fill={`url(#${gid})`} />
+        <path d={d} fill="none" stroke={col} strokeWidth={2} strokeLinejoin="round" />
+        {!hp && <circle cx={x(points[points.length - 1].h)} cy={y(points[points.length - 1].v)} r={3.5} fill={col} />}
         {cutoff != null && <line x1={x(cutoff)} x2={x(cutoff)} y1={T} y2={H - B} stroke="#5b5b60" strokeDasharray="3 3" />}
         {refs.map((r, i) => {
           const close = i > 0 && Math.abs(y(r.value) - y(refs[0].value)) < 14;
@@ -68,12 +77,12 @@ export function ViewsChart({ points, maxH, refs = [], cutoff, fmt = fmtViews, un
         {hp && (
           <g>
             <line x1={x(hp.h)} x2={x(hp.h)} y1={T} y2={H - B} stroke="#8b8b90" />
-            <circle cx={x(hp.h)} cy={y(hp.v)} r={4.5} fill="#ff2a2a" stroke="#0f0f10" strokeWidth={2} />
+            <circle cx={x(hp.h)} cy={y(hp.v)} r={4.5} fill={col} stroke="#0f0f10" strokeWidth={2} />
           </g>
         )}
       </svg>
       {hp && (
-        <div className="num" style={{ position: "absolute", top: 4, left: 50, fontSize: 12, background: "#000", border: "1px solid #2e2e31", borderRadius: 6, padding: "3px 8px" }}>
+        <div className="num" style={{ position: "absolute", top: 4, left: 50, fontSize: 12, background: "rgba(8,8,10,.9)", border: "1px solid rgba(255,255,255,.12)", borderRadius: 8, padding: "3px 8px" }}>
           {hp.h < 48 ? `${Math.round(hp.h)}h` : `day ${(hp.h / 24).toFixed(1)}`} · {fmt(hp.v)} {unit}
         </div>
       )}

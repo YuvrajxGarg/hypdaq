@@ -5,7 +5,8 @@ import { NICHES } from "@/lib/catalog";
 import { platform } from "@/lib/platforms";
 import { Snap, sharesFor } from "@/lib/market";
 import { State } from "@/lib/store";
-import { ViewsChart } from "./charts";
+import { Spark, ViewsChart } from "./charts";
+import { Chip, Num, burst } from "./fx";
 
 export type Actions = {
   buy: (s: Snap, n: number, call?: number) => string | null;
@@ -61,7 +62,7 @@ export const shownPrice = (s: Snap) => (s.status === "settled" ? shareValue(s.gr
 
 export function Change({ s }: { s: Snap }) {
   const live = s.status === "open" || s.status === "closed";
-  return <span className={`num ${live && s.t >= 1 ? (s.change >= 0 ? "up" : "down") : "muted"}`}>{changeTxt(s)}</span>;
+  return live && s.t >= 1 ? <Chip v={s.change} /> : <Chip v={0} label={changeTxt(s)} />;
 }
 
 /** The market for one post: price, chart, a few numbers, your position. Used in side panels and detail pages. */
@@ -74,7 +75,7 @@ export function MarketBox({ s, state, chart = true }: { s: Snap; state: State; c
       <div>
         <div className="muted" style={{ fontSize: 12 }}>${ticker(l)} · {statusLine(s)}</div>
         <div className="row" style={{ alignItems: "baseline", marginTop: 4 }}>
-          <span className="big num">{fmtPrice(shownPrice(s))}</span>
+          <Num className="big" value={shownPrice(s)} fmt={fmtPrice} />
           <Change s={s} />
         </div>
       </div>
@@ -118,10 +119,12 @@ export function TradeSheet({ s, side: initial, state, actions, onClose }: { s: S
   const coins = side === "buy" ? s.cost(nn) : s.sellFor(nn);
   const unit = platform(s.l.platform).unit;
 
-  const go = () => {
+  const go = (ev: React.MouseEvent) => {
     const e = side === "buy" ? actions.buy(s, nn, guess ? call : undefined) : actions.sell(s, nn);
-    if (e) setErr(e);
-    else onClose();
+    if (e) return setErr(e);
+    const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+    burst(r.left + r.width / 2, r.top + r.height / 2);
+    onClose();
   };
   const chips = side === "buy" ? [10, 25, 50, 100] : [Math.ceil(sellable / 4), Math.ceil(sellable / 2), sellable];
 
@@ -138,20 +141,24 @@ export function TradeSheet({ s, side: initial, state, actions, onClose }: { s: S
               <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>@{s.l.creator}</div>
             </div>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div className="num" style={{ fontSize: 22, fontWeight: 700 }}>{fmtPrice(s.price)}</div>
-            <div style={{ fontSize: 12 }}><Change s={s} /></div>
+          <div className="row" style={{ gap: 12 }}>
+            <Spark values={s.history.map((p) => p.v)} w={64} h={28} color={s.change >= 0 ? "var(--up)" : "var(--down)"} />
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 22, fontWeight: 700 }}><Num value={s.price} fmt={fmtPrice} /></div>
+              <div style={{ fontSize: 12, marginTop: 2 }}><Change s={s} /></div>
+            </div>
           </div>
         </div>
         {sellable > 0 && s.canBuy && (
           <div className="seg" style={{ marginBottom: 18 }}>
+            <span className="ind" style={{ transform: side === "sell" ? "translateX(100%)" : "none" }} />
             <button className={side === "buy" ? "on" : ""} onClick={() => { setSide("buy"); setN(Math.min(20, maxBuy)); }}>Buy</button>
             <button className={side === "sell" ? "on" : ""} onClick={() => { setSide("sell"); setN(sellable); }}>Sell</button>
           </div>
         )}
         <div style={{ textAlign: "center", margin: "6px 0 10px" }}>
-          <div className="num" style={{ fontSize: 44, fontWeight: 700, letterSpacing: "-0.04em" }}>{nn}</div>
-          <div className="muted" style={{ fontSize: 13 }}>shares · {side === "buy" ? "costs" : "you get"} <b className="num" style={{ color: "var(--text)" }}>{Math.round(coins)}</b> coins</div>
+          <div style={{ fontSize: 48, fontWeight: 700, letterSpacing: "-0.05em" }}><Num value={nn} fmt={(v) => String(v)} /></div>
+          <div className="muted" style={{ fontSize: 13 }}>shares · {side === "buy" ? "costs" : "you get"} <b className="num" style={{ color: "var(--text)" }}>{Math.round(coins)}</b> coins · avg {nn ? fmtPrice(coins / nn) : "–"}</div>
         </div>
         <input type="range" min={0} max={Math.max(0, max)} step={1} value={nn} onChange={(e) => setN(+e.target.value)} aria-label="Shares" disabled={max <= 0} />
         <div className="quick" style={{ justifyContent: "center", marginTop: 10 }}>

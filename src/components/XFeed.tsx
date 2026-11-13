@@ -36,13 +36,13 @@ function Tweet({ s, state, open, onTrade, big }: { s: Snap; state: State; open: 
   );
 }
 
-export function XFeed({ items, trending, sort, setSort, state, detail, open, back, onTrade }: {
-  items: Snap[]; trending: Snap[]; sort: Sort; setSort: (s: Sort) => void; state: State; detail: Snap | null;
+export function XFeed({ items, sort, setSort, state, detail, open, back, onTrade }: {
+  items: Snap[]; sort: Sort; setSort: (s: Sort) => void; state: State; detail: Snap | null;
   open: (id: string) => void; back: () => void; onTrade: (id: string, side: "buy" | "sell") => void;
 }) {
   const hold = detail ? state.holdings[detail.l.id] : undefined;
   return (
-    <div className="x-wrap">
+    <div className="page-anim">
       <div className="x-col">
         {detail ? (
           <>
@@ -69,21 +69,6 @@ export function XFeed({ items, trending, sort, setSort, state, detail, open, bac
           </>
         )}
       </div>
-      <aside className="x-side">
-        <div className="x-box">
-          <h3>Rising markets</h3>
-          {trending.map((s) => (
-            <button key={s.l.id} className="x-trend" onClick={() => open(s.l.id)}>
-              <div style={{ minWidth: 0 }}>
-                <div className="s">${ticker(s.l)} · @{s.l.creator}</div>
-                <div style={{ fontWeight: 600, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>{s.l.title}</div>
-              </div>
-              <div style={{ textAlign: "right", fontSize: 13 }}><div className="num" style={{ fontWeight: 600 }}>{fmtPrice(s.price)}</div><Change s={s} /></div>
-            </button>
-          ))}
-        </div>
-        <p className="dim" style={{ fontSize: 12, padding: "0 16px", lineHeight: 1.5 }}>X markets trade on likes + reposts + replies, since views aren&apos;t public.</p>
-      </aside>
     </div>
   );
 }

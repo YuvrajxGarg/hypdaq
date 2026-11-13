@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { fmtNum, fmtPrice, fmtX } from "@/lib/game";
 import { Snap } from "@/lib/market";
 import { State } from "@/lib/store";
+import { Num } from "./fx";
 import { Change, I, MarketBox, Sort, avBg, postBg, shownPrice } from "./Market";
 
 const TABS: Sort[] = ["For you", "New", "Rising", "Ended"];
@@ -35,12 +36,12 @@ export function Reels({ feed, sort, setSort, state, focus, onTrade, onList }: {
               </div>
               <div className="reel-rail">
                 <button className="ri" onClick={() => onTrade(l.id, "buy")} aria-label="Price">
-                  {I.trend()}
-                  <span className="num">{fmtPrice(shownPrice(s))}</span>
+                  <span className="bubble">{I.trend(22)}</span>
+                  <Num value={shownPrice(s)} fmt={fmtPrice} />
                   <span style={{ fontSize: 11 }}><Change s={s} /></span>
                 </button>
-                <div className="ri" title="Holders">{I.people()}<span className="num">{fmtNum(s.holders)}</span></div>
-                <div className="ri" title="Growth since listing">{I.rocket()}<span className="num">{fmtX(s.growth)}</span></div>
+                <div className="ri" title="Holders"><span className="bubble">{I.people(22)}</span><span className="num">{fmtNum(s.holders)}</span></div>
+                <div className="ri" title="Growth since listing"><span className="bubble">{I.rocket(22)}</span><span className="num">{fmtX(s.growth)}</span></div>
               </div>
               <div className="reel-meta">
                 <div className="who-row">

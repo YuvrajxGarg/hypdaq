@@ -13,26 +13,27 @@ import { Bars } from "./charts";
 
 // ---------------- Portfolio ----------------
 
-export function Portfolio({ snaps, state, update, reset, open }: {
-  snaps: Map<string, Snap>; state: State; update: (fn: (s: State) => State) => void; reset: () => void; open: (id: string) => void;
-}) {
-  const rows = Object.values(state.holdings).map((h) => ({ h, s: snaps.get(h.listingId) })).filter((x) => x.s) as { h: State["holdings"][string]; s: Snap }[];
+export type Row = { h: State["holdings"][string]; s: Snap };
+/** Your book: open and settled positions, their value and P&L. */
+export function bookStats(snaps: Map<string, Snap>, state: State) {
+  const rows = Object.values(state.holdings).map((h) => ({ h, s: snaps.get(h.listingId) })).filter((x) => x.s) as Row[];
   const live = rows.filter((r) => r.s.status === "open" || r.s.status === "closed");
   const done = rows.filter((r) => r.s.status === "settled" || r.s.status === "void");
   const marked = live.reduce((t, r) => t + r.h.shares * r.s.price, 0);
+  const openPnl = live.reduce((t, r) => t + r.h.shares * r.s.price - r.h.cost, 0);
   const realised = done.reduce((t, r) => t + (state.paid[r.h.listingId] ?? 0) - r.h.cost, 0);
   const callPts = done.reduce((t, r) => t + (r.h.call && r.s.status === "settled" ? callPoints(r.h.call, viewsAt(r.s.l, SETTLE_H)) : 0), 0);
+  return { live, done, marked, openPnl, realised, callPts };
+}
+
+export function Portfolio({ snaps, state, update, reset, open }: {
+  snaps: Map<string, Snap>; state: State; update: (fn: (s: State) => State) => void; reset: () => void; open: (id: string) => void;
+}) {
+  const { live, done } = bookStats(snaps, state);
   const ff = (h: number) => update((s) => ({ ...s, clockH: h === 0 ? 0 : s.clockH + h }));
 
   return (
-    <div className="page">
-      <div className="page-head"><h1>Your book.</h1><p>Positions, settled markets and your scouting record.</p></div>
-      <div className="kpis">
-        <div className="kpi"><div className="k">Coins</div><div className="v num">{Math.round(state.coins)}</div><div className="s">+200 every day you play</div></div>
-        <div className="kpi"><div className="k">Open positions</div><div className="v num">{Math.round(marked)}</div><div className="s">at current prices</div></div>
-        <div className="kpi"><div className="k">Settled P&amp;L</div><div className={`v num ${realised >= 0 ? "up" : "down"}`}>{fmtSigned(realised)}</div><div className="s">coins</div></div>
-        <div className="kpi"><div className="k">Call points</div><div className="v num">{callPts}</div><div className="s">closest-call score</div></div>
-      </div>
+    <div className="page-anim">
 
       <Section title="Open" empty="Nothing open. Scroll the feed and buy into something early." rows={live} state={state} open={open} />
       <Section title="Settled" empty="Nothing settled yet. Markets settle 7 days after listing." rows={done} state={state} open={open} />
@@ -52,7 +53,7 @@ export function Portfolio({ snaps, state, update, reset, open }: {
   );
 }
 
-function Section({ title, empty, rows, state, open }: { title: string; empty: string; rows: { h: State["holdings"][string]; s: Snap }[]; state: State; open: (id: string) => void }) {
+function Section({ title, empty, rows, state, open }: { title: string; empty: string; rows: Row[]; state: State; open: (id: string) => void }) {
   return (
     <div className="section">
       <h2>{title}</h2>
@@ -92,8 +93,8 @@ const PLAYERS = [
   "trendtrader.in", "sleeperpicks", "nocapcapital", "bullish.on.cats", "reelrishi", "contrarian.kid", "hookhunter", "saves.not.likes",
 ];
 
-export function Leaders({ state, snaps, day }: { state: State; snaps: Map<string, Snap>; day: string }) {
-  const [tab, setTab] = useState<"traders" | "scouts" | "calls">("traders");
+export type LbTab = "traders" | "scouts" | "calls";
+export function leaderRows(state: State, snaps: Map<string, Snap>, day: string, tab: LbTab) {
   const r = rngFor(`lb:${day}`);
   const mock = PLAYERS.map((n) => ({ name: n, pnl: Math.round(gauss(r) * 900 + 400), scout: Math.max(1, 1 + Math.abs(gauss(r)) * 6), hits: Math.floor(r() * 5), calls: Math.round(Math.max(0, gauss(r) * 120 + 180)) }));
   let pnl = 0, calls = 0;
@@ -108,9 +109,14 @@ export function Leaders({ state, snaps, day }: { state: State; snaps: Map<string
   const all = [...mock, me];
   const key = tab === "traders" ? "pnl" : tab === "scouts" ? "scout" : "calls";
   const sorted = [...all].sort((a, b) => (b[key] as number) - (a[key] as number));
+  return sorted as ({ name: string; pnl: number; scout: number; hits: number; calls: number; me?: boolean })[];
+}
+
+export function Leaders({ state, snaps, day }: { state: State; snaps: Map<string, Snap>; day: string }) {
+  const [tab, setTab] = useState<LbTab>("traders");
+  const sorted = leaderRows(state, snaps, day, tab);
   return (
-    <div className="page">
-      <div className="page-head"><h1>Who called it first.</h1><p>This week. Other players are sample data until accounts go live.</p></div>
+    <div className="page-anim">
       <div className="quick" style={{ marginBottom: 14 }}>
         {(["traders", "scouts", "calls"] as const).map((t) => <button key={t} className={`pill ${tab === t ? "on" : ""}`} onClick={() => setTab(t)}>{t === "traders" ? "Top traders" : t === "scouts" ? "Best scouts" : "Sharpest calls"}</button>)}
       </div>
@@ -156,8 +162,7 @@ export function Insights({ now }: { now: number }) {
   const marketErr = median(mispriced.map((m) => Math.abs(m.p - m.v)));
 
   return (
-    <div className="page">
-      <div className="page-head"><h1>What&apos;s working.</h1><p>For creators and agencies: what grows after it gets spotted, by platform, niche, format and timing. And where the crowd gets it wrong.</p></div>
+    <div className="page-anim">
       <div className="mock-note" style={{ maxWidth: "none", marginBottom: 18 }}>
         Sample data: computed from {hist.length} simulated settled listings. Once live, these numbers come from real listed posts, the tags scouts add, and real trades.
       </div>
