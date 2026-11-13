@@ -1,9 +1,11 @@
 # HYPDAQ
 
-Daily "invest in reels before they blow up" game. Next.js 15 (App Router), client-only, no database yet.
+A stock market for posts: viewers list reels/YouTube/X posts they think will blow up; everyone trades them in a Reels-style feed
+(market numbers on the right rail, the post's real likes/views in a small strip). Next.js 15 (App Router), client-only, no database yet.
 Read `README.md` for rules, scoring and what is mocked.
 
-- All data is simulated and seeded per day in `src/lib/engine.ts`; captions/creators in `src/lib/catalog.ts` are fictional.
+- Market rules and the simulation are in `src/lib/game.ts`, per-listing UI numbers in `src/lib/market.ts`; captions/creators in
+  `src/lib/catalog.ts` are fictional. Players are VIEWERS scouting other people's posts, not creators posting their own.
   Keep the "Sample data" labels until a real feed replaces the generators.
 - Own GitHub repo (`YuvrajxGarg/hypdaq`) and own Vercel project (`hypdaq`). Not part of revolio-labs or revolio-studio-2.
 - Production deploys from `main` only; other branches are skipped by `vercel.json`. Batch changes so each merge is one deploy.

@@ -1,36 +1,36 @@
 "use client";
-// Player state lives in this browser only (localStorage). No accounts or server yet.
+// Player state lives in this browser only (localStorage) until accounts and a database exist.
 
 import { useCallback, useEffect, useState } from "react";
+import { Listing, START_COINS, DAILY_COINS } from "./game";
 
-export type ReelPos = { reelId: string; day: string; pred: number; stake: number; stage: number; at: number };
-export type CreatorPos = { key: string; handle: string; day: string; side: "viral" | "irrelevant"; stake: number; entry: number };
+export type Holding = { listingId: string; shares: number; cost: number; call?: number; firstBuyAt: number; founder?: number };
+export type Trade = { listingId: string; side: "buy" | "sell"; shares: number; coins: number; at: number };
+export type MyListing = Omit<Listing, "base" | "peakHour" | "steep" | "growth" | "heat" | "bought">;
 
 export type State = {
-  reels: Record<string, ReelPos>;
-  peeks: Record<string, number>; // reelId -> stage index revealed
-  creators: Record<string, CreatorPos>;
-  deep: Record<string, string>; // day -> deep cut id
-  demoSettled: Record<string, boolean>; // day -> fast-forwarded
+  coins: number;
+  lastDrip: string;
+  holdings: Record<string, Holding>;
+  trades: Trade[];
+  myListings: MyListing[];
+  paid: Record<string, number>; // listingId -> coins credited at settlement
+  clockH: number; // demo: hours fast-forwarded
 };
 
-const KEY = "hypdaq.v1";
-const EMPTY: State = { reels: {}, peeks: {}, creators: {}, deep: {}, demoSettled: {} };
-
-function load(): State {
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? { ...EMPTY, ...JSON.parse(raw) } : EMPTY;
-  } catch {
-    return EMPTY;
-  }
-}
+const KEY = "hypdaq.v2";
+const EMPTY: State = { coins: START_COINS, lastDrip: "", holdings: {}, trades: [], myListings: [], paid: {}, clockH: 0 };
 
 export function useGameState() {
   const [state, setState] = useState<State>(EMPTY);
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    setState(load());
+    let s = EMPTY;
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) s = { ...EMPTY, ...JSON.parse(raw) };
+    } catch {}
+    setState(s);
     setReady(true);
   }, []);
   const update = useCallback((fn: (s: State) => State) => {
@@ -42,13 +42,6 @@ export function useGameState() {
       return next;
     });
   }, []);
-  const reset = useCallback(() => update(() => EMPTY), [update]);
-  return { state, update, ready, reset };
-}
-
-export function spentOn(state: State, day: string): number {
-  let s = 0;
-  for (const p of Object.values(state.reels)) if (p.day === day) s += p.stake;
-  for (const p of Object.values(state.creators)) if (p.day === day) s += p.stake;
-  return s;
+  const reset = useCallback(() => update(() => ({ ...EMPTY })), [update]);
+  return { state, update, ready, reset, DAILY_COINS };
 }

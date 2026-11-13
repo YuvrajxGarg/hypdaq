@@ -1,41 +1,51 @@
 # HYPDAQ
 
-A daily game: invest in reels before they blow up. A Revolio Labs prototype in the SLANGDAQ family.
+A stock market for posts. Viewers scout reels, YouTube videos and X posts they think will blow up, list them, and
+everyone trades them in a Reels-style feed. A Revolio Labs prototype in the SLANGDAQ family.
 
 ## How it plays
 
-- **Floor**: six new reels each day (midnight IST). You see their first hours: views, share/save/like/comment rates.
-  Predict the 7-day view count and stake coins (1,000 play coins a day).
-- **Go early**: buy at 2h for ×3.0 profit, or wait for 6h / 12h / 24h data (×2.2 / ×1.6 / ×1.2). Waiting is one-way.
-- **Scoring**: accuracy = 1 − |log10(call ÷ actual)| (zero once you're 10× off). Coins back = stake × 2.2 × accuracy^1.5.
-  The early multiplier applies to profit only, never to losses.
-- **Creators**: back a creator to go *viral* or call them *irrelevant*. Each has a Hype Index; you win 3× the 7-day move
-  in your direction, and can lose at most your stake.
-- **Deep Cuts**: five long-tail reels under 4K views. One free pick a day. Points = log growth ÷ √(share of players who
-  picked it), so a sleeper nobody backed scores most (rarity scoring, krillion-style).
-- **Portfolio**: open and settled positions, weekly leaderboard. "Fast-forward 7 days" settles a day instantly (demo only).
-- **Insights**: for creators and agencies. Median 7-day views by format, hook, length, audio and niche; share rate at 6h vs
-  outcome; reels the crowd under-called and over-hyped.
+- **Feed**: full-screen, vertical scroll like Reels. The right rail is the market: ticker, price, 24h change, Buy, Sell,
+  growth since listing. The post's own numbers (views, likes, comments, shares) sit in a small strip under the caption.
+  Filters: For you / New / Rising / Settled, and All / Reels / YouTube / X.
+- **List a post**: paste a link to any public post under 24h old. One market per post, 3 listings a day. The scout gets
+  20 founder shares free, locked until settlement, so finding a sleeper early pays and listing-then-dumping doesn't.
+- **Price**: a bonding curve. Price = 1 + 0.0025 × shares outstanding, so every buy pushes it up and early buyers pay less.
+  Sell back to the curve any time before settlement. Buying closes 3 days after listing; max 200 shares per trade.
+- **Settlement**: 7 days after listing we read the post's numbers. Each share pays log₂(1 + growth since listing):
+  no growth = 1.00, 3× = 2.00, 15× = 4.00. X posts trade on likes + reposts + replies (views aren't public).
+- **Closest call** (optional, on buy): guess the 7-day number. 100 points for exact, 0 if 10× off.
+- **Fake views void a market**: if views jump while likes/comments don't follow, the listing is voided and everyone is
+  refunded what they paid.
+- **Coins**: 1,000 to start, +200 each day you play. Play money only.
+- **Leaders**: top traders (settled P&L), best scouts (median growth of what they listed, 10× hits), sharpest calls.
+- **Insights** (creators/agencies): growth after listing by how early it was spotted, platform, creator size, format,
+  hook and length; posts the market underpriced and overpriced.
 
 ## What is mocked
 
-Everything data-related is simulated from a per-day seed in `src/lib/engine.ts`, and every caption, creator and handle in
-`src/lib/catalog.ts` is fictional:
+- Every listing in the feed, its creator, caption, view/like/comment curve and outcome: simulated from a seed
+  (`src/lib/game.ts`, captions in `src/lib/catalog.ts`). All handles are fictional.
+- Other players: their buys (the price curve's crowd), holder counts, leaderboards.
+- When you list a post, the link is parsed for real (platform, post id, Reel/Short/Video/Post), but its title, creator
+  followers and numbers are typed or simulated, since nothing fetches live data yet.
+- Insights are computed from 600 simulated settled listings.
+- Your coins, positions and listings live in your browser (`localStorage`, key `hypdaq.v2`).
+- Portfolio has a **demo clock** (+6h / +1 day / +7 days) so you can watch markets settle without waiting.
 
-- Reels, their view curves, engagement signals and 7-day outcomes.
-- Creator Hype Index history and future moves.
-- The crowd (players' median calls, player counts, Deep Cut pick shares) and the leaderboard players.
-- Insights are computed from ~600 simulated settled reels, so they reflect the model's built-in effects, not real reels.
+## Making it live
 
-Player state is saved in the browser (`localStorage`, key `hypdaq.v1`). No accounts, no server, no real money.
-
-## Making it live (next steps)
-
-1. **Reel feed**: replace `dailyFloor()` with a cron that picks fresh public reels (e.g. via a licensed social data API)
-   and snapshots views and engagement at 2h/6h/12h/24h/7d into a database (Supabase, like SLANGDAQ).
-2. **Crowd**: store every player's call server-side, so crowd medians, Deep Cut shares and leaderboards are real.
-3. **Accounts**: sign-in so portfolios survive across devices.
-4. **Insights**: run the same breakdowns over real settled reels and real player calls.
+1. **Database + accounts** (Supabase): listings, trades, holdings, snapshots, users. Move trading server-side so the
+   price curve is shared by everyone.
+2. **Number checker (cron)**: every few hours, snapshot each open listing:
+   - YouTube: YouTube Data API (free key), exact views/likes/comments.
+   - Instagram Reels: read the public reel page (plays, likes, comments). Instagram often blocks server requests, so
+     keep a paid scraping service as a fallback.
+   - X: public post data gives likes, reposts and replies (not views), so X markets settle on engagements.
+3. **Listing check**: on submit, fetch the post once to fill title/creator/followers, confirm it exists, read its real
+   post time (enforces the 24h rule) and take the first snapshot.
+4. **Embeds**: show the real post in the feed (Instagram/YouTube/X embeds) instead of the placeholder card.
+5. **Fraud**: run the bought-views check on real snapshots; rate-limit accounts; one account per person.
 
 ## Develop
 
@@ -46,4 +56,4 @@ npm run build
 npm run typecheck
 ```
 
-Deploys: Vercel project `hypdaq`, production from `main` only. `vercel.json` turns off builds for every other branch.
+Deploys: Vercel project `hypdaq`, production from `main` only. `vercel.json` skips every other branch.

@@ -160,24 +160,30 @@ export const CREATORS: Creator[] = [
   { handle: "notes.by.night", niche: "study", followers: 19_000, blurb: "Aesthetic study vlogs" },
 ];
 
-// Deep Cuts: long-tail niches where a breakout is rare. Fictional micro-creators.
-export const DEEP_CUTS: { caption: string; handle: string; tag: string }[] = [
-  { caption: "Restoring a 1970s transistor radio", handle: "valve.and.knob", tag: "Repair" },
-  { caption: "Kathakali make-up, start to finish", handle: "green.face.studio", tag: "Craft" },
-  { caption: "Rescuing a bonsai from a scrap shop", handle: "tiny.banyan", tag: "Plants" },
-  { caption: "Competitive speed-folding of sarees", handle: "pleat.club", tag: "Oddly specific" },
-  { caption: "Mapping every stepwell in one district", handle: "baoli.maps", tag: "History" },
-  { caption: "Hand-painting truck art letters", handle: "horn.ok.please", tag: "Craft" },
-  { caption: "Sound of 40 different pressure cookers", handle: "whistle.archive", tag: "ASMR" },
-  { caption: "Fixing a kid's cycle with only jugaad", handle: "jugaad.garage", tag: "Repair" },
-  { caption: "Origami elephants from bus tickets", handle: "ticket.fold", tag: "Craft" },
-  { caption: "Cataloguing pigeon breeds of Old Delhi", handle: "kabootar.ledger", tag: "Animals" },
-  { caption: "Grandma rates Gen Z slang", handle: "naani.decides", tag: "Family" },
-  { caption: "A day sorting a library's lost-and-found", handle: "shelf.life.in", tag: "Slice of life" },
-  { caption: "Brewing kombucha from leftover chai", handle: "ferment.lab.mumbai", tag: "Food science" },
-  { caption: "Calligraphy on fallen peepal leaves", handle: "leaf.ink", tag: "Craft" },
-  { caption: "Reviewing railway platform water taps", handle: "platform.critic", tag: "Oddly specific" },
-  { caption: "Building a sitar from a gourd", handle: "gourd.and.string", tag: "Music" },
-  { caption: "Monsoon frog chorus, 8 hours compressed", handle: "night.field.audio", tag: "Nature" },
-  { caption: "Tailor explains every collar type", handle: "collar.theory", tag: "Fashion" },
+// YouTube titles and X posts for the sample community feed. Fictional.
+export const YT_TITLES: [string, Hook, Format, string][] = [
+  ["I lived on ₹500 for 7 days in Mumbai", "Day N series", "Vlog", "money"],
+  ["Every Indian wedding in 60 seconds", "Cold open", "Skit", "comedy"],
+  ["The ₹15k phone that beats flagships", "Hot take", "Talking head", "tech"],
+  ["Street food tour: one road, 12 stalls", "Number list", "Vlog", "food"],
+  ["How I study 10 hours without burning out", "Question", "Tutorial", "study"],
+  ["My dog meets a cat for the first time", "Cold open", "Meme edit", "pets"],
+  ["Building a gym in my balcony for ₹20k", "Day N series", "Before/after", "gym"],
+  ["Why nobody talks about this hill town", "Question", "Vlog", "travel"],
+  ["Last-over finishes ranked", "Number list", "Meme edit", "cricket"],
+  ["The sitar cover nobody asked for", "Slow intro", "Tutorial", "music"],
+  ["POV: you're the only one who can cook in the hostel", "POV", "Skit", "food"],
+  ["5 makeup myths dermatologists hate", "Number list", "Talking head", "beauty"],
+];
+export const X_POSTS: [string, Hook, Format, string][] = [
+  ["Hot take: the best biryani in Bengaluru is from a petrol pump", "Hot take", "Talking head", "food"],
+  ["My manager just said 'let's take this offline' in a 1:1", "Cold open", "Meme edit", "comedy"],
+  ["Thread: 9 things I learned building a side project to ₹1L/month", "Number list", "Text on b-roll", "money"],
+  ["Indian parents when the Wi-Fi goes down, a thread", "POV", "Meme edit", "tech"],
+  ["Nobody tells you the hardest part of the gym is the first 2 weeks", "Hot take", "Talking head", "gym"],
+  ["Test cricket is the only format that tells you who someone really is", "Hot take", "Talking head", "cricket"],
+  ["Cats don't knock things off tables. They're running physics experiments.", "Cold open", "Meme edit", "pets"],
+  ["What's a song that instantly takes you back to 2009?", "Question", "Talking head", "music"],
+  ["Day 30 of posting one study tip a day", "Day N series", "Text on b-roll", "study"],
+  ["Overnight trains are the most underrated way to travel India. Here's why", "Number list", "Text on b-roll", "travel"],
 ];
