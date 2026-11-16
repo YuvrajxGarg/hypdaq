@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
-import { BUY_WINDOW_H, MAX_SHARES_PER_TRADE, SETTLE_H, fmtAge, fmtNum, fmtPct, fmtPrice, fmtX, shareValue, ticker } from "@/lib/game";
-import { NICHES } from "@/lib/catalog";
+import { MAX_SHARES_PER_TRADE, SETTLE_H, fmtAge, fmtNum, fmtPct, fmtPrice, fmtX, hashString, metric, metricName, shareValue, ticker } from "@/lib/game";
 import { platform } from "@/lib/platforms";
 import { Snap, sharesFor } from "@/lib/market";
 import { State } from "@/lib/store";
@@ -14,15 +13,29 @@ export type Actions = {
 };
 export type Sort = "For you" | "New" | "Rising" | "Ended";
 
-const hueOf = (niche: string) => NICHES.find((n) => n.id === niche)?.hue ?? 0;
-
-export function postBg(niche: string, id: string) {
-  const hue = hueOf(niche);
+/** Placeholder backdrop for a post that has no thumbnail, coloured from its id. */
+export function postBg(id: string) {
+  const hue = hashString(id) % 360;
   const a = (id.length * 37 + id.charCodeAt(id.length - 1) * 13) % 70;
   return `radial-gradient(120% 70% at ${15 + a}% 8%, hsl(${hue} 80% 48% / .8), transparent 60%),
     radial-gradient(90% 60% at 90% 85%, hsl(${(hue + 40) % 360} 70% 26% / .9), transparent 70%),
     linear-gradient(165deg, hsl(${hue} 35% 13%), #050505)`;
 }
+const EMPTY: Record<string, string> = {
+  reels: "No reels listed yet.", youtube: "No YouTube videos listed yet.", x: "No X posts listed yet.",
+};
+/** Shown when a feed has no real listings yet. */
+export function EmptyFeed({ app, sort, onList }: { app: string; sort?: Sort; onList?: () => void }) {
+  const ended = sort === "Ended";
+  return (
+    <div className="empty-feed">
+      <p className="h">{ended ? "Nothing has settled yet." : sort === "New" || sort === "Rising" ? "Nothing open here right now." : EMPTY[app]}</p>
+      <p>{ended ? "Markets settle 7 days after listing, on the post's real numbers." : "Paste a link to a public post you think will blow up. We read its real numbers and open a market on it."}</p>
+      {onList && !ended && <button className="btn red" onClick={onList}>List a post</button>}
+    </div>
+  );
+}
+
 export const avBg = (creator: string) => {
   let h = 0;
   for (const c of creator) h = (h * 31 + c.charCodeAt(0)) % 360;
@@ -55,9 +68,10 @@ export function statusLine(s: Snap) {
   if (s.status === "open") return `Buying open · ${fmtAge(s.buyClosesIn)} left`;
   if (s.status === "closed") return `Buying closed · settles in ${fmtAge(s.settlesIn)}`;
   if (s.status === "void") return "Voided: fake views, everyone refunded";
+  if (s.status === "settling") return "Settling · waiting for the day-7 reading";
   return `Settled · paid ${fmtPrice(shareValue(s.growth))} a share`;
 }
-export const changeTxt = (s: Snap) => (s.status === "settled" ? "final" : s.status === "void" ? "void" : s.t < 1 ? "new" : fmtPct(s.change));
+export const changeTxt = (s: Snap) => (s.status === "settled" ? "final" : s.status === "void" ? "void" : s.status === "settling" ? "settling" : s.t < 1 ? "new" : fmtPct(s.change));
 export const shownPrice = (s: Snap) => (s.status === "settled" ? shareValue(s.growth) : s.price);
 
 export function Change({ s }: { s: Snap }) {
@@ -79,19 +93,20 @@ export function MarketBox({ s, state, chart = true }: { s: Snap; state: State; c
           <Change s={s} />
         </div>
       </div>
-      {chart && <ViewsChart points={s.history} maxH={Math.max(1, Math.min(s.t, SETTLE_H))} fmt={fmtPrice} unit="" yMin={1} label="Price since listing"
-        cutoff={BUY_WINDOW_H < s.t ? BUY_WINDOW_H : undefined} refs={[{ label: "Pays now", value: shareValue(s.growth), dashed: true }]} />}
+      {chart && s.l.stats.length > 1 && <ViewsChart points={s.l.stats.map((x) => ({ h: (x.at - l.listedAt) / 3_600_000, v: metric(l, x) }))} maxH={Math.max(1, Math.min(s.t, SETTLE_H))}
+        unit={metricName(l.platform)} label={`Real ${metricName(l.platform)} since listing`} />}
+      {chart && s.l.stats.length <= 1 && <p className="hint" style={{ fontSize: 12 }}>The chart fills in as we re-read the post&apos;s numbers (about every hour while the app is open).</p>}
       <div className="kv">
         <div><div className="k">A share pays now</div><div className="v num">{fmtPrice(shareValue(s.growth))}</div></div>
         <div><div className="k">Growth since listing</div><div className="v num">{fmtX(s.growth)}</div></div>
-        <div><div className="k">{p.unit[0].toUpperCase() + p.unit.slice(1)}</div><div className="v num">{fmtNum(s.eng.views)}</div></div>
-        <div><div className="k">Holders</div><div className="v num">{fmtNum(s.holders)}</div></div>
+        <div><div className="k">{p.unit[0].toUpperCase() + p.unit.slice(1)} now</div><div className="v num">{fmtNum(metric(l, s.eng))}</div></div>
+        <div><div className="k">Last checked</div><div className="v num">{s.checkedAt ? `${fmtAge((Date.now() - s.checkedAt) / 3_600_000)} ago` : "–"}</div></div>
       </div>
       {hold && (
         <div className="stat-line" style={{ paddingTop: 12, borderTop: "1px solid var(--line)" }}>
           <span>You own <b className="num">{hold.shares}</b>{hold.founder ? ` (${hold.founder} founder)` : ""}</span>
           <span>Paid <b className="num">{Math.round(hold.cost)}</b></span>
-          <span>Worth <b className="num">{Math.round(hold.shares * (s.status === "void" ? 0 : shownPrice(s)))}</b></span>
+          <span>Pays now <b className="num">{Math.round(hold.shares * (s.status === "void" ? 0 : shareValue(s.growth)))}</b></span>
         </div>
       )}
       <p className="hint" style={{ fontSize: 12 }}>
@@ -110,7 +125,7 @@ export function TradeSheet({ s, side: initial, state, actions, onClose }: { s: S
   const maxBuy = Math.min(MAX_SHARES_PER_TRADE, sharesFor(state.coins, s.shares));
   const [n, setN] = useState(() => (side === "buy" ? Math.min(20, maxBuy) : sellable));
   const [guess, setGuess] = useState(false);
-  const nowViews = s.eng.views;
+  const nowViews = metric(s.l, s.eng);
   const [logCall, setLogCall] = useState(() => Math.min(LOG_MAX, Math.log10(Math.max(100, nowViews * 3))));
   const [err, setErr] = useState<string | null>(null);
   const call = Math.round(Math.pow(10, logCall));

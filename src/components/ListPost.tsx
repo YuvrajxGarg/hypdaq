@@ -1,31 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Format, Hook, NICHES } from "@/lib/catalog";
-import { BUY_WINDOW_H, H, Listing, MAX_LISTINGS_PER_DAY, MAX_POST_AGE_H, SCOUT_SHARES, SETTLE_H, fmtAge } from "@/lib/game";
+import { BUY_WINDOW_H, H, Listing, MAX_LISTINGS_PER_DAY, MAX_POST_AGE_H, SCOUT_SHARES, SETTLE_H, Stat, fmtAge, fmtNum, metric, metricName } from "@/lib/game";
 import { ParsedLink, parseLink, platform } from "@/lib/platforms";
 import { igPostedAt, xPostedAt } from "@/lib/postTime";
-import { rngFor } from "@/lib/rng";
-import { MyListing, State } from "@/lib/store";
+import { State } from "@/lib/store";
 import { avBg } from "./Market";
 
-type Peek = ParsedLink & { title?: string; creator?: string; postedAt?: number; source?: string[] };
+type Peek = ParsedLink & { title?: string; creator?: string; postedAt?: number; thumb?: string; stats?: Omit<Stat, "at">; source?: string[] };
 
 const istDay = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(ms));
-
-// Tags for Insights, guessed from the title. Rough on purpose; real classification comes later.
-const NICHE_WORDS: Record<string, RegExp> = {
-  food: /food|recipe|cook|chai|biryani|maggi|eat|restaurant|street/i, pets: /dog|cat|pet|puppy|kitten/i,
-  cricket: /cricket|ipl|bowl|bat|wicket|kohli|dhoni/i, money: /money|₹|rupee|invest|stock|salary|budget|sip|crore|lakh/i,
-  beauty: /makeup|skin|hair|beauty|glow/i, dance: /dance|choreo/i, travel: /travel|trip|goa|manali|flight|visa/i,
-  gym: /gym|workout|protein|fitness|lift/i, tech: /phone|iphone|laptop|ai|tech|app|gadget/i, music: /song|music|cover|singing|beat/i,
-  study: /study|exam|jee|neet|upsc|college|student/i,
-};
-function guessTags(title: string, kind: string) {
-  const niche = Object.entries(NICHE_WORDS).find(([, re]) => re.test(title))?.[0] ?? "comedy";
-  const hook: Hook = /^pov/i.test(title) ? "POV" : /\?\s*$/.test(title) ? "Question" : /^\d+|\b\d+ (things|ways|tips)/i.test(title) ? "Number list" : /day \d+/i.test(title) ? "Day N series" : "Cold open";
-  const format: Format = /how to|tutorial|guide|tips/i.test(title) ? "Tutorial" : /before|after/i.test(title) ? "Before/after" : kind === "Video" ? "Vlog" : "Skit";
-  return { niche: NICHES.some((n) => n.id === niche) ? niche : "comedy", hook, format };
-}
 
 export function ListPost({ all, state, now, update, onListed, initial = "" }: {
   all: Listing[]; state: State; now: number; update: (fn: (s: State) => State) => void; onListed: (id: string) => void; initial?: string;
@@ -64,7 +47,7 @@ export function ListPost({ all, state, now, update, onListed, initial = "" }: {
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dupe = ok ? all.find((l) => l.platform === ok.platform && l.postId === ok.postId) : undefined;
-  const today = state.myListings.filter((l) => istDay(l.listedAt) === istDay(now)).length;
+  const today = state.listings.filter((l) => istDay(l.listedAt) === istDay(now)).length;
   const ageH = peek?.postedAt ? (Date.now() - peek.postedAt) / H : undefined;
   const tooOld = ageH != null && ageH > MAX_POST_AGE_H;
   const creator = (peek?.creator ?? "").replace(/^@/, "");
@@ -73,26 +56,25 @@ export function ListPost({ all, state, now, update, onListed, initial = "" }: {
   const problem = !ok ? null
     : dupe ? `Already on the market (spotted by @${dupe.scout}). Trade it from the feed.`
     : tooOld ? `Posted ${fmtAge(ageH!)} ago. Only posts under ${MAX_POST_AGE_H}h old can be listed, so nobody lists something that already blew up.`
+    : loading ? null
+    : ageH == null ? "Couldn't confirm when this was posted, so it can't be listed. Check the link and try again."
+    : !peek?.stats ? `Couldn't read this post's ${metricName(ok.platform)} right now, so there's nothing to settle on. ${ok.platform === "reels" ? "Instagram often blocks our reader; try again in a bit." : "Try again in a bit."}`
     : today >= MAX_LISTINGS_PER_DAY ? `You've listed ${MAX_LISTINGS_PER_DAY} posts today. Come back tomorrow.`
     : null;
 
   const submit = () => {
     if (!ok) return setErr(parsed && "error" in parsed ? parsed.error : "Paste a link first.");
     if (problem) return setErr(problem);
-    const id = `u-${ok.platform}-${ok.postId}`;
-    const handle = creator || "unknown";
-    const tags = guessTags(title, ok.kind);
-    const r = rngFor(`f:${handle}`);
-    const ml: MyListing = {
-      id, platform: ok.platform, kind: ok.kind, postId: ok.postId, url: ok.url, title, creator: handle,
-      creatorFollowers: Math.round(Math.pow(10, 3 + r() * 3.5)), // sample until the checker reads real followers
-      scout: "you", listedAt: now, postAgeAtListH: Math.max(0.2, ageH ?? 3), mine: true,
-      tags: { ...tags, lengthSec: ok.platform === "x" ? 0 : ok.kind === "Video" ? 300 : 20 },
+    const id = `${ok.platform}-${ok.postId}`;
+    const l: Listing = {
+      id, platform: ok.platform, kind: ok.kind, postId: ok.postId, url: ok.url, title, creator: creator || "unknown",
+      scout: "you", listedAt: Date.now(), postedAt: peek!.postedAt, thumb: peek!.thumb,
+      stats: [{ at: Date.now(), ...peek!.stats! }],
     };
     update((s) => ({
       ...s,
-      myListings: [...s.myListings, ml],
-      holdings: { ...s.holdings, [id]: { listingId: id, shares: SCOUT_SHARES, founder: SCOUT_SHARES, cost: 0, firstBuyAt: now } },
+      listings: [...s.listings, l],
+      holdings: { ...s.holdings, [id]: { listingId: id, shares: SCOUT_SHARES, founder: SCOUT_SHARES, cost: 0, firstBuyAt: Date.now() } },
     }));
     onListed(id);
   };
@@ -120,17 +102,13 @@ export function ListPost({ all, state, now, update, onListed, initial = "" }: {
             {loading && !peek.title ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}><div className="skel" style={{ height: 14, width: "92%" }} /><div className="skel" style={{ height: 14, width: "60%" }} /></div>
             ) : (
-              <p style={{ fontSize: 15, lineHeight: 1.4, color: peek.title ? "var(--text)" : "var(--muted)" }}>{peek.title ?? "Title not readable yet. The number checker fills it in."}</p>
+              <p style={{ fontSize: 15, lineHeight: 1.4, color: peek.title ? "var(--text)" : "var(--muted)" }}>{peek.title ?? "Title not readable from this link."}</p>
             )}
             <div className="stat-line">
               <span>Posted <b>{ageH != null ? `${fmtAge(ageH)} ago` : loading ? "…" : "unknown"}</b></span>
+              {peek.stats && <span><b className="num">{fmtNum(metric(ok, { at: 0, ...peek.stats }))}</b> {metricName(ok.platform)} now</span>}
               {ageH != null && <span className={tooOld ? "down" : "up"}>{tooOld ? "Too old to list" : "Fresh enough"}</span>}
             </div>
-            {!loading && (!peek.title || ageH == null) && (
-              <p className="dim" style={{ fontSize: 12 }}>
-                {ageH == null ? "Post time couldn't be checked here, so this prototype uses a sample age. " : ""}Live, the checker confirms these on submit.
-              </p>
-            )}
           </div>
         )}
 

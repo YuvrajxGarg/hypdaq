@@ -1,18 +1,18 @@
 "use client";
 // App frame: live ticker tape, left nav, right account dock (desktop), top bar + bottom nav (phone),
-// and the "You" hub that keeps portfolio, leaderboard and insights in one place.
+// and the "You" hub that keeps portfolio and insights in one place.
 import { useState } from "react";
 import { GAME, fmtPrice, fmtSigned, ticker } from "@/lib/game";
 import { PlatformId } from "@/lib/platforms";
 import { Snap } from "@/lib/market";
 import { State } from "@/lib/store";
-import { Insights, Leaders, Portfolio, bookStats, leaderRows } from "./Pages";
+import { Insights, Portfolio, bookStats } from "./Pages";
 import { Spark } from "./charts";
-import { Chip, Num } from "./fx";
+import { Num } from "./fx";
 import { I, avBg } from "./Market";
 
 export type Page = null | "list" | "you";
-export type HubTab = "portfolio" | "leaders" | "insights";
+export type HubTab = "portfolio" | "insights";
 export const APPS: { id: PlatformId; label: string; icon: (s?: number) => React.ReactNode }[] = [
   { id: "reels", label: "Reels", icon: I.reels }, { id: "youtube", label: "YouTube", icon: I.yt }, { id: "x", label: "X", icon: I.x },
 ];
@@ -49,35 +49,33 @@ export function Side({ app, page, counts, go, goApp, held }: {
       </button>
       <div className="side-foot">
         <button className="btn red" onClick={() => go("list")} title="List a post">{I.plus(18)}<span className="lbl">List a post</span></button>
-        <p className="side-note">Sample data: posts, numbers and other players are simulated. Play money only.</p>
+        <p className="side-note">Play money. Real posts, real numbers. Saved in this browser until accounts launch.</p>
       </div>
     </nav>
   );
 }
 
-export function Dock({ state, snaps, day, open, openHub, onQuickList }: {
-  state: State; snaps: Map<string, Snap>; day: string; open: (id: string) => void; openHub: (t: HubTab) => void; onQuickList: (link: string) => void;
+export function Dock({ state, snaps, open, openHub, onQuickList }: {
+  state: State; snaps: Map<string, Snap>; open: (id: string) => void; openHub: (t: HubTab) => void; onQuickList: (link: string) => void;
 }) {
   const b = bookStats(snaps, state);
-  const lb = leaderRows(state, snaps, day, "traders");
-  const myRank = lb.findIndex((p) => p.me) + 1;
   const [link, setLink] = useState("");
   return (
     <aside className="dock">
       <div className="card balance">
-        <div className="between"><span className="label">Balance</span><span className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)" }}><span className="live-dot" />Live</span></div>
+        <span className="label">Balance</span>
         <div className="big"><span className="coin" /><Num value={Math.round(state.coins)} fmt={(v) => v.toLocaleString("en-IN")} /></div>
         <div className="dim" style={{ fontSize: 12 }}>coins · +200 every day you play</div>
         <div className="mini-kpis">
           <div><div className="k">In markets</div><div className="v num">{Math.round(b.marked)}</div></div>
           <div><div className="k">Open P&amp;L</div><div className={`v num ${b.openPnl >= 0 ? "up" : "down"}`}>{fmtSigned(b.openPnl)}</div></div>
-          <div><div className="k">Rank</div><div className="v num">#{myRank}</div></div>
+          <div><div className="k">Settled</div><div className={`v num ${b.realised >= 0 ? "up" : "down"}`}>{fmtSigned(b.realised)}</div></div>
         </div>
       </div>
 
       <div className="card">
         <h3>Positions <button onClick={() => openHub("portfolio")}>See all</button></h3>
-        {b.live.length === 0 ? <p className="hint" style={{ fontSize: 13 }}>Nothing yet. Buy into a post early and it shows up here.</p> : (
+        {b.live.length === 0 ? <p className="hint" style={{ fontSize: 13 }}>Nothing yet. List a post you think will blow up and it shows up here.</p> : (
           b.live.slice(0, 6).map(({ h, s }) => {
             const pnl = h.shares * s.price - h.cost;
             return (
@@ -98,14 +96,6 @@ export function Dock({ state, snaps, day, open, openHub, onQuickList }: {
       </div>
 
       <div className="card">
-        <h3>Leaderboard <button onClick={() => openHub("leaders")}>See all</button></h3>
-        {lb.slice(0, 3).map((p, i) => (
-          <div key={p.name} className={`rank-row ${p.me ? "me" : ""}`}><span className={`medal ${i === 0 ? "g" : ""}`}>{i + 1}</span><span>{p.name}</span><span className="num">{fmtSigned(p.pnl)}</span></div>
-        ))}
-        {myRank > 3 && <div className="rank-row me"><span className="medal">{myRank}</span><span>You</span><span className="num">{fmtSigned(lb[myRank - 1].pnl)}</span></div>}
-      </div>
-
-      <div className="card">
         <h3>Spotted something?</h3>
         <form className="quick-list" onSubmit={(e) => { e.preventDefault(); onQuickList(link); setLink(""); }}>
           <input className="input" placeholder="Paste a post link" value={link} onChange={(e) => setLink(e.target.value)} aria-label="Post link" />
@@ -116,13 +106,11 @@ export function Dock({ state, snaps, day, open, openHub, onQuickList }: {
   );
 }
 
-export function Hub({ tab, setTab, state, snaps, day, now, update, reset, open }: {
-  tab: HubTab; setTab: (t: HubTab) => void; state: State; snaps: Map<string, Snap>; day: string; now: number;
-  update: (fn: (s: State) => State) => void; reset: () => void; open: (id: string) => void;
+export function Hub({ tab, setTab, state, snaps, reset, open }: {
+  tab: HubTab; setTab: (t: HubTab) => void; state: State; snaps: Map<string, Snap>;
+  reset: () => void; open: (id: string) => void;
 }) {
   const b = bookStats(snaps, state);
-  const lb = leaderRows(state, snaps, day, "traders");
-  const myRank = lb.findIndex((p) => p.me) + 1;
   const net = b.marked + state.coins;
   return (
     <div className="page page-anim">
@@ -137,18 +125,17 @@ export function Hub({ tab, setTab, state, snaps, day, now, update, reset, open }
         <div className="mini-kpis" style={{ marginTop: 0, gridTemplateColumns: "1fr 1fr" }}>
           <div><div className="k">Open P&amp;L</div><div className={`v num ${b.openPnl >= 0 ? "up" : "down"}`} style={{ fontSize: 20 }}>{fmtSigned(b.openPnl)}</div></div>
           <div><div className="k">Settled P&amp;L</div><div className={`v num ${b.realised >= 0 ? "up" : "down"}`} style={{ fontSize: 20 }}>{fmtSigned(b.realised)}</div></div>
-          <div><div className="k">Rank this week</div><div className="v num" style={{ fontSize: 20 }}>#{myRank} <Chip v={0} label={`of ${lb.length}`} /></div></div>
+          <div><div className="k">Posts listed</div><div className="v num" style={{ fontSize: 20 }}>{state.listings.length}</div></div>
           <div><div className="k">Call points</div><div className="v num" style={{ fontSize: 20 }}>{b.callPts}</div></div>
         </div>
       </div>
       <div className="tabs">
-        {(["portfolio", "leaders", "insights"] as const).map((t) => (
-          <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{t === "portfolio" ? "Portfolio" : t === "leaders" ? "Leaderboard" : "Insights"}</button>
+        {(["portfolio", "insights"] as const).map((t) => (
+          <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{t === "portfolio" ? "Portfolio" : "Insights"}</button>
         ))}
       </div>
-      {tab === "portfolio" && <Portfolio snaps={snaps} state={state} update={update} reset={reset} open={open} />}
-      {tab === "leaders" && <Leaders state={state} snaps={snaps} day={day} />}
-      {tab === "insights" && <Insights now={now} />}
+      {tab === "portfolio" && <Portfolio snaps={snaps} state={state} reset={reset} open={open} />}
+      {tab === "insights" && <Insights snaps={snaps} />}
     </div>
   );
 }

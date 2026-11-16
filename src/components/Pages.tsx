@@ -1,53 +1,37 @@
 "use client";
-import { useMemo, useState } from "react";
-import { lengthBucket } from "@/lib/catalog";
-import {
-  BUY_WINDOW_H, LENGTH_ORDER, Listing, SETTLE_H, archive, breakdown, callPoints, crowdShares, fmtNum, fmtPrice, fmtSigned, fmtX, median,
-  priceAt, shareValue, ticker, viewsAt,
-} from "@/lib/game";
+import { H, Listing, callPoints, fmtNum, fmtSigned, fmtX, median, metric, settleStat, shareValue, ticker } from "@/lib/game";
 import { Snap } from "@/lib/market";
 import { platform } from "@/lib/platforms";
-import { rngFor, gauss } from "@/lib/rng";
 import { State } from "@/lib/store";
 import { Bars } from "./charts";
 
 // ---------------- Portfolio ----------------
 
 export type Row = { h: State["holdings"][string]; s: Snap };
+const isLive = (s: Snap) => s.status === "open" || s.status === "closed" || s.status === "settling";
+const callResult = (l: Listing, call: number) => { const st = settleStat(l); return st ? { actual: metric(l, st), pts: callPoints(call, metric(l, st)) } : null; };
+
 /** Your book: open and settled positions, their value and P&L. */
 export function bookStats(snaps: Map<string, Snap>, state: State) {
   const rows = Object.values(state.holdings).map((h) => ({ h, s: snaps.get(h.listingId) })).filter((x) => x.s) as Row[];
-  const live = rows.filter((r) => r.s.status === "open" || r.s.status === "closed");
-  const done = rows.filter((r) => r.s.status === "settled" || r.s.status === "void");
+  const live = rows.filter((r) => isLive(r.s));
+  const done = rows.filter((r) => !isLive(r.s));
   const marked = live.reduce((t, r) => t + r.h.shares * r.s.price, 0);
   const openPnl = live.reduce((t, r) => t + r.h.shares * r.s.price - r.h.cost, 0);
   const realised = done.reduce((t, r) => t + (state.paid[r.h.listingId] ?? 0) - r.h.cost, 0);
-  const callPts = done.reduce((t, r) => t + (r.h.call && r.s.status === "settled" ? callPoints(r.h.call, viewsAt(r.s.l, SETTLE_H)) : 0), 0);
+  const callPts = done.reduce((t, r) => t + (r.h.call && r.s.status === "settled" ? callResult(r.s.l, r.h.call)?.pts ?? 0 : 0), 0);
   return { live, done, marked, openPnl, realised, callPts };
 }
 
-export function Portfolio({ snaps, state, update, reset, open }: {
-  snaps: Map<string, Snap>; state: State; update: (fn: (s: State) => State) => void; reset: () => void; open: (id: string) => void;
-}) {
+export function Portfolio({ snaps, state, reset, open }: { snaps: Map<string, Snap>; state: State; reset: () => void; open: (id: string) => void }) {
   const { live, done } = bookStats(snaps, state);
-  const ff = (h: number) => update((s) => ({ ...s, clockH: h === 0 ? 0 : s.clockH + h }));
-
   return (
     <div className="page-anim">
-
-      <Section title="Open" empty="Nothing open. Scroll the feed and buy into something early." rows={live} state={state} open={open} />
-      <Section title="Settled" empty="Nothing settled yet. Markets settle 7 days after listing." rows={done} state={state} open={open} />
-
+      <Section title="Open" empty="Nothing open yet. List a post you think will blow up, or buy into one you've listed." rows={live} state={state} open={open} />
+      <Section title="Settled" empty="Nothing settled yet. Markets settle 7 days after listing, on the post's real numbers." rows={done} state={state} open={open} />
       <div className="section">
-        <h2>Demo clock <span className="dim" style={{ fontWeight: 400, fontSize: 12 }}>prototype only</span></h2>
-        <p className="hint" style={{ marginBottom: 10 }}>Markets take days to play out. Jump ahead to watch your positions move and settle. {state.clockH ? `Currently +${state.clockH}h.` : ""}</p>
-        <div className="quick">
-          <button className="btn small" onClick={() => ff(6)}>+6 hours</button>
-          <button className="btn small" onClick={() => ff(24)}>+1 day</button>
-          <button className="btn small" onClick={() => ff(SETTLE_H)}>+7 days</button>
-          <button className="btn small" onClick={() => ff(0)} disabled={!state.clockH}>Back to now</button>
-          <button className="btn small" onClick={() => { if (confirm("Clear your coins, positions and listings in this browser?")) reset(); }}>Reset my game</button>
-        </div>
+        <p className="hint" style={{ marginBottom: 10 }}>Your coins, listings and positions are saved in this browser. Accounts and a shared market come next.</p>
+        <button className="btn small" onClick={() => { if (confirm("Clear your coins, positions and listings in this browser?")) reset(); }}>Reset my game</button>
       </div>
     </div>
   );
@@ -65,14 +49,16 @@ function Section({ title, empty, rows, state, open }: { title: string; empty: st
             const paid = state.paid[l.id];
             const worth = s.status === "void" ? h.cost : settled ? h.shares * shareValue(s.growth) : h.shares * s.price;
             const pnl = worth - h.cost;
+            const call = h.call ? callResult(l, h.call) : null;
             return (
-              <button className="pos" key={l.id} style={{ width: "100%", textAlign: "left" }} onClick={() => open(l.id)}>
-                <div>
+              <button className="pos" key={l.id} onClick={() => open(l.id)}>
+                <div style={{ minWidth: 0 }}>
                   <div className="t">${ticker(l)} · {l.title}</div>
                   <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
                     {platform(l.platform).short} · {h.shares} shares{h.founder ? ` (${h.founder} founder)` : ""} · paid {Math.round(h.cost)} · growth {fmtX(s.growth)}
-                    {h.call ? ` · call ${fmtNum(h.call)}${settled ? ` → ${fmtNum(viewsAt(l, SETTLE_H))} (${callPoints(h.call, viewsAt(l, SETTLE_H))} pts)` : ""}` : ""}
+                    {h.call ? ` · guess ${fmtNum(h.call)}${settled && call ? ` → ${fmtNum(call.actual)} (${call.pts} pts)` : ""}` : ""}
                     {s.status === "void" ? " · voided, refunded" : ""}
+                    {s.status === "settling" ? " · waiting for the day-7 reading" : ""}
                     {settled && paid != null ? ` · paid out ${Math.round(paid)}` : ""}
                   </div>
                 </div>
@@ -86,121 +72,59 @@ function Section({ title, empty, rows, state, open }: { title: string; empty: st
   );
 }
 
-// ---------------- Leaders ----------------
-
-const PLAYERS = [
-  "chartgoblin", "fyp.oracle", "reelwhisperer", "earlybird.09", "hypehunter", "algo.astrologer", "viralvaidya", "scrolltrader", "loopqueen",
-  "trendtrader.in", "sleeperpicks", "nocapcapital", "bullish.on.cats", "reelrishi", "contrarian.kid", "hookhunter", "saves.not.likes",
-];
-
-export type LbTab = "traders" | "scouts" | "calls";
-export function leaderRows(state: State, snaps: Map<string, Snap>, day: string, tab: LbTab) {
-  const r = rngFor(`lb:${day}`);
-  const mock = PLAYERS.map((n) => ({ name: n, pnl: Math.round(gauss(r) * 900 + 400), scout: Math.max(1, 1 + Math.abs(gauss(r)) * 6), hits: Math.floor(r() * 5), calls: Math.round(Math.max(0, gauss(r) * 120 + 180)) }));
-  let pnl = 0, calls = 0;
-  for (const h of Object.values(state.holdings)) {
-    const s = snaps.get(h.listingId);
-    if (!s || (s.status !== "settled" && s.status !== "void")) continue;
-    pnl += (state.paid[h.listingId] ?? 0) - h.cost;
-    if (h.call && s.status === "settled") calls += callPoints(h.call, viewsAt(s.l, SETTLE_H));
-  }
-  const mine = state.myListings.map((m) => snaps.get(m.id)).filter(Boolean) as Snap[];
-  const me = { name: "You", pnl: Math.round(pnl), scout: mine.length ? median(mine.map((s) => s.growth)) : 0, hits: mine.filter((s) => s.growth >= 10).length, calls, me: true };
-  const all = [...mock, me];
-  const key = tab === "traders" ? "pnl" : tab === "scouts" ? "scout" : "calls";
-  const sorted = [...all].sort((a, b) => (b[key] as number) - (a[key] as number));
-  return sorted as ({ name: string; pnl: number; scout: number; hits: number; calls: number; me?: boolean })[];
-}
-
-export function Leaders({ state, snaps, day }: { state: State; snaps: Map<string, Snap>; day: string }) {
-  const [tab, setTab] = useState<LbTab>("traders");
-  const sorted = leaderRows(state, snaps, day, tab);
-  return (
-    <div className="page-anim">
-      <div className="quick" style={{ marginBottom: 14 }}>
-        {(["traders", "scouts", "calls"] as const).map((t) => <button key={t} className={`pill ${tab === t ? "on" : ""}`} onClick={() => setTab(t)}>{t === "traders" ? "Top traders" : t === "scouts" ? "Best scouts" : "Sharpest calls"}</button>)}
-      </div>
-      <p className="hint" style={{ marginBottom: 12 }}>
-        {tab === "traders" ? "Settled profit in coins." : tab === "scouts" ? "Median growth of the posts they listed, after listing. Hits = posts that grew 10× or more." : "Points from closest calls on 7-day numbers (100 = exact)."}
-      </p>
-      <div className="scroll-x">
-        <table className="table">
-          <thead><tr><th style={{ width: 48 }}>#</th><th>Player</th>{tab === "scouts" && <th className="r">Hits</th>}<th className="r">{tab === "traders" ? "P&L" : tab === "scouts" ? "Median growth" : "Points"}</th></tr></thead>
-          <tbody>
-            {sorted.map((p, i) => (
-              <tr key={p.name} className={"me" in p ? "lb-me" : ""}>
-                <td className="num">{i + 1}</td>
-                <td className="handle">{p.name}</td>
-                {tab === "scouts" && <td className="r num">{p.hits}</td>}
-                <td className={`r num ${tab === "traders" ? (p.pnl >= 0 ? "up" : "down") : ""}`}>{tab === "traders" ? fmtSigned(p.pnl) : tab === "scouts" ? (p.scout ? fmtX(p.scout) : "—") : p.calls}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 // ---------------- Insights ----------------
 
 const ageBucket = (h: number) => (h < 1 ? "Under 1h" : h < 6 ? "1–6h" : "6–24h");
-const tierBucket = (f: number) => (f < 1e4 ? "Under 10K" : f < 1e5 ? "10K–100K" : f < 1e6 ? "100K–1M" : "1M+");
 
-export function Insights({ now }: { now: number }) {
-  const hist = useMemo(() => archive(now), [now]);
-  const rows = (b: ReturnType<typeof breakdown>) => b.map((r) => ({ key: r.key, value: r.median, note: `${Math.round(r.hitRate * 100)}% 10×`, tip: `${r.n} listings · median growth ${fmtX(r.median)} · ${Math.round(r.hitRate * 100)}% grew 10×+` }));
-  const byPlat = breakdown(hist, (l) => platform(l.platform).short);
-  const byAge = breakdown(hist, (l) => ageBucket(l.postAgeAtListH), ["Under 1h", "1–6h", "6–24h"]);
-  const byTier = breakdown(hist, (l) => tierBucket(l.creatorFollowers), ["Under 10K", "10K–100K", "100K–1M", "1M+"]);
-  const byFormat = breakdown(hist, (l) => l.tags.format);
-  const byHook = breakdown(hist, (l) => l.tags.hook);
-  const byLen = breakdown(hist.filter((l) => l.tags.lengthSec), (l) => lengthBucket(l.tags.lengthSec).label, LENGTH_ORDER);
-  const mispriced = hist.map((l) => ({ l, p: priceAt(crowdShares(l, BUY_WINDOW_H)), v: shareValue(l.growth) }));
-  const under = [...mispriced].sort((a, b) => b.v / b.p - a.v / a.p).slice(0, 5);
-  const over = [...mispriced].sort((a, b) => b.p / b.v - a.p / a.v).slice(0, 5);
-  const marketErr = median(mispriced.map((m) => Math.abs(m.p - m.v)));
-
-  return (
-    <div className="page-anim">
-      <div className="mock-note" style={{ maxWidth: "none", marginBottom: 18 }}>
-        Sample data: computed from {hist.length} simulated settled listings. Once live, these numbers come from real listed posts, the tags scouts add, and real trades.
-      </div>
-      <div className="kpis">
-        <div className="kpi"><div className="k">Settled listings</div><div className="v num">{hist.length}</div><div className="s">last 3 weeks</div></div>
-        <div className="kpi"><div className="k">Median growth after listing</div><div className="v num">{fmtX(median(hist.map((l) => l.growth)))}</div><div className="s">7 days</div></div>
-        <div className="kpi"><div className="k">Grew 10× or more</div><div className="v num">{Math.round((hist.filter((l) => l.growth >= 10).length / hist.length) * 100)}%</div><div className="s">of listings</div></div>
-        <div className="kpi"><div className="k">Market miss</div><div className="v num">{fmtPrice(marketErr)}</div><div className="s">median gap, price at close vs payout</div></div>
-      </div>
-      <div className="section two">
-        <div className="panel"><h3>Growth by how early it was listed</h3><Bars rows={rows(byAge)} fmt={fmtX} /><p className="hint" style={{ marginTop: 10 }}>Posts spotted in their first hour grow the most after listing. Scouting early is the edge.</p></div>
-        <div className="panel"><h3>Growth by platform</h3><Bars rows={rows(byPlat)} fmt={fmtX} /></div>
-        <div className="panel"><h3>By creator size</h3><Bars rows={rows(byTier)} fmt={fmtX} /></div>
-        <div className="panel"><h3>By format</h3><Bars rows={rows(byFormat)} fmt={fmtX} /></div>
-        <div className="panel"><h3>By hook</h3><Bars rows={rows(byHook)} fmt={fmtX} /></div>
-        <div className="panel"><h3>By length (video)</h3><Bars rows={rows(byLen)} fmt={fmtX} /></div>
-      </div>
-      <div className="section two">
-        <Mis title="Underpriced: the crowd missed these" items={under} />
-        <Mis title="Overpriced: hype that didn't land" items={over} />
-      </div>
-    </div>
-  );
+function groups(ls: Snap[], key: (s: Snap) => string, order?: string[]) {
+  const g = new Map<string, Snap[]>();
+  for (const s of ls) g.set(key(s), [...(g.get(key(s)) ?? []), s]);
+  const rows = [...g.entries()].map(([k, xs]) => ({
+    key: k, value: median(xs.map((s) => s.growth)), note: `${xs.length}`,
+    tip: `${xs.length} listing${xs.length > 1 ? "s" : ""} · median growth ${fmtX(median(xs.map((s) => s.growth)))}`,
+  }));
+  if (order) rows.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+  else rows.sort((a, b) => b.value - a.value);
+  return rows;
 }
 
-function Mis({ title, items }: { title: string; items: { l: Listing; p: number; v: number }[] }) {
-  return (
-    <div className="panel">
-      <h3>{title}</h3>
-      {items.map(({ l, p, v }) => (
-        <div key={l.id} className="between" style={{ padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-          <div>
-            <div style={{ fontWeight: 600 }}>{l.title}</div>
-            <div className="muted" style={{ fontSize: 12 }}>{platform(l.platform).short} · {l.tags.format} · {l.tags.hook} · price {fmtPrice(p)} → paid {fmtPrice(v)}</div>
-          </div>
-          <span className="num" style={{ fontWeight: 700 }}>{fmtX(l.growth)}</span>
+/** What grew after it was listed, from real settled listings only. */
+export function Insights({ snaps }: { snaps: Map<string, Snap> }) {
+  const done = [...snaps.values()].filter((s) => s.status === "settled");
+  if (done.length < 3) {
+    return (
+      <div className="page-anim">
+        <div className="empty">
+          Insights appear once 3 markets have settled on real numbers ({done.length}/3 so far). They show what grew after it was spotted: by platform,
+          by how early it was listed, and the biggest movers.
         </div>
-      ))}
+      </div>
+    );
+  }
+  const top = [...done].sort((a, b) => b.growth - a.growth).slice(0, 5);
+  return (
+    <div className="page-anim">
+      <div className="kpis">
+        <div className="kpi"><div className="k">Settled markets</div><div className="v num">{done.length}</div></div>
+        <div className="kpi"><div className="k">Median growth</div><div className="v num">{fmtX(median(done.map((s) => s.growth)))}</div><div className="s">7 days after listing</div></div>
+        <div className="kpi"><div className="k">Grew 10× or more</div><div className="v num">{Math.round((done.filter((s) => s.growth >= 10).length / done.length) * 100)}%</div></div>
+        <div className="kpi"><div className="k">Voided</div><div className="v num">{[...snaps.values()].filter((s) => s.status === "void").length}</div><div className="s">fake views caught</div></div>
+      </div>
+      <div className="section two">
+        <div className="panel"><h3>Growth by platform</h3><Bars rows={groups(done, (s) => platform(s.l.platform).short)} fmt={fmtX} /></div>
+        <div className="panel"><h3>Growth by how early it was listed</h3><Bars rows={groups(done, (s) => ageBucket(s.l.postedAt ? (s.l.listedAt - s.l.postedAt) / H : 12), ["Under 1h", "1–6h", "6–24h"])} fmt={fmtX} /></div>
+      </div>
+      <div className="section">
+        <div className="panel">
+          <h3>Biggest movers</h3>
+          {top.map((s) => (
+            <div key={s.l.id} className="between" style={{ padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+              <div style={{ minWidth: 0 }}><div style={{ fontWeight: 600 }}>{s.l.title}</div><div className="muted" style={{ fontSize: 12 }}>{platform(s.l.platform).short} · @{s.l.creator}</div></div>
+              <span className="num" style={{ fontWeight: 700 }}>{fmtX(s.growth)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

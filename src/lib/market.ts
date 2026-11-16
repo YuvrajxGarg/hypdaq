@@ -1,32 +1,37 @@
 import {
-  BUY_WINDOW_H, H, Listing, SETTLE_H, buyCost, crowdShares, engagementAt, growthAt, holdersAt, priceAt, sellReturn, shareValue, statusOf,
+  BUY_WINDOW_H, H, Listing, SETTLE_H, Stat, buyCost, finalGrowth, growthAt, priceAt, sellReturn, shareValue, statAt, statusOf,
 } from "./game";
 import { State } from "./store";
 
 export type Snap = ReturnType<typeof snapshot>;
 
-export function userShares(state: State, id: string) {
-  return state.holdings[id]?.shares ?? 0;
+/** Shares outstanding at time `at`, from real trades (the scout's founder shares count from listing). */
+function sharesAt(l: Listing, state: State, at: number) {
+  const founder = l.scout === "you" ? state.holdings[l.id]?.founder ?? 0 : 0;
+  let n = at >= l.listedAt ? founder : 0;
+  for (const tr of state.trades) if (tr.listingId === l.id && tr.at <= at) n += tr.side === "buy" ? tr.shares : -tr.shares;
+  return Math.max(0, n);
 }
+
+const ZERO: Stat = { at: 0, views: 0, likes: 0, comments: 0, shares: 0 };
 
 /** Everything the UI needs about one listing at time `now`. */
 export function snapshot(l: Listing, state: State, now: number) {
   const t = (now - l.listedAt) / H;
   const hold = state.holdings[l.id];
-  const mine = userShares(state, l.id) - (hold?.founder ?? 0); // founder shares are already in the crowd count
-  const since = hold ? (hold.firstBuyAt - l.listedAt) / H : Infinity;
-  const out = (tt: number) => crowdShares(l, tt) + (tt >= since ? mine : 0);
-  const shares = crowdShares(l, t) + mine;
+  const shares = sharesAt(l, state, now);
   const price = priceAt(shares);
-  const price24 = priceAt(out(Math.max(0, t - 24)));
+  const price24 = priceAt(sharesAt(l, state, now - 24 * H));
   const status = statusOf(l, t);
-  const growth = growthAt(l, Math.min(t, SETTLE_H));
+  const growth = status === "settled" ? finalGrowth(l) : growthAt(l, Math.min(t, SETTLE_H));
+  const last = statAt(l, t) ?? ZERO;
+  const span = Math.max(1, Math.min(t, SETTLE_H));
   return {
     l, t, status, shares, price,
     change: price / price24 - 1,
-    sinceList: price - 1,
-    holders: holdersAt(l, t) + (hold && !hold.founder ? 1 : 0),
-    eng: engagementAt(l, Math.min(t, SETTLE_H)),
+    holders: hold ? 1 : 0,
+    eng: last,
+    checkedAt: last.at,
     growth,
     valueNow: shareValue(growth), // what a share would pay if it settled now
     buyClosesIn: BUY_WINDOW_H - t,
@@ -36,9 +41,10 @@ export function snapshot(l: Listing, state: State, now: number) {
     cost: (n: number) => buyCost(shares, n),
     sellFor: (n: number) => sellReturn(shares, n),
     history: Array.from({ length: 49 }, (_, i) => {
-      const tt = (Math.min(t, SETTLE_H) * i) / 48;
-      return { h: tt, v: priceAt(i === 48 ? shares : out(tt)) };
+      const tt = (span * i) / 48;
+      return { h: tt, v: priceAt(sharesAt(l, state, l.listedAt + tt * H)) };
     }),
+    growthHistory: l.stats.map((s) => ({ h: (s.at - l.listedAt) / H, v: growthAt(l, (s.at - l.listedAt) / H) })),
   };
 }
 

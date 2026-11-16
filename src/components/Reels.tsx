@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { fmtNum, fmtPrice, fmtX } from "@/lib/game";
+import { fmtNum, fmtPrice, fmtX, metric, metricName } from "@/lib/game";
 import { Snap } from "@/lib/market";
 import { State } from "@/lib/store";
 import { Num } from "./fx";
-import { Change, I, MarketBox, Sort, avBg, postBg, shownPrice } from "./Market";
+import { Change, EmptyFeed, I, MarketBox, Sort, avBg, postBg, shownPrice } from "./Market";
 
 const TABS: Sort[] = ["For you", "New", "Rising", "Ended"];
 
@@ -22,6 +22,18 @@ export function Reels({ feed, sort, setSort, state, focus, onTrade, onList }: {
     setActive(Math.max(0, i));
   }, [sort, focus]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (feed.length === 0) return (
+    <div className="reels">
+      <section className="reel-slide">
+        <div className="reel">
+          <div className="reel-tabs">
+            {TABS.map((t) => <button key={t} className={sort === t ? "on" : ""} onClick={() => setSort(t)}>{t}</button>)}
+          </div>
+          <EmptyFeed app="reels" sort={sort} onList={onList} />
+        </div>
+      </section>
+    </div>
+  );
   return (
     <div className="reels" ref={ref} onScroll={(e) => setActive(Math.round(e.currentTarget.scrollTop / e.currentTarget.clientHeight))}>
       {feed.map((s, i) => {
@@ -30,7 +42,10 @@ export function Reels({ feed, sort, setSort, state, focus, onTrade, onList }: {
         return (
           <section className="reel-slide" key={l.id}>
             <div className="reel">
-              <div className="reel-art" style={{ background: postBg(l.tags.niche, l.id) }}><p>{l.title}</p></div>
+              <div className="reel-art" style={{ background: postBg(l.id) }}><p>{l.title}</p></div>
+              {Math.abs(i - active) <= 1 && (
+                <iframe className="reel-embed" src={`https://www.instagram.com/p/${l.postId}/embed`} title={l.title} loading="lazy" allow="autoplay; encrypted-media" />
+              )}
               <div className="reel-tabs">
                 {TABS.map((t) => <button key={t} className={sort === t ? "on" : ""} onClick={() => setSort(t)}>{t}</button>)}
               </div>
@@ -40,7 +55,7 @@ export function Reels({ feed, sort, setSort, state, focus, onTrade, onList }: {
                   <Num value={shownPrice(s)} fmt={fmtPrice} />
                   <span style={{ fontSize: 11 }}><Change s={s} /></span>
                 </button>
-                <div className="ri" title="Holders"><span className="bubble">{I.people(22)}</span><span className="num">{fmtNum(s.holders)}</span></div>
+                <div className="ri" title={`Real ${metricName(l.platform)} now`}><span className="bubble">{I.eye(22)}</span><span className="num">{fmtNum(metric(l, s.eng))}</span></div>
                 <div className="ri" title="Growth since listing"><span className="bubble">{I.rocket(22)}</span><span className="num">{fmtX(s.growth)}</span></div>
               </div>
               <div className="reel-meta">
@@ -55,10 +70,10 @@ export function Reels({ feed, sort, setSort, state, focus, onTrade, onList }: {
                 </div>
                 <p className="cap">{l.title}</p>
                 <div className="tiny">
-                  <span>{I.eye(13)}{fmtNum(s.eng.views)}</span>
+                  {s.eng.views > 0 && <span>{I.eye(13)}{fmtNum(s.eng.views)}</span>}
                   <span>{I.heart(13)}{fmtNum(s.eng.likes)}</span>
                   <span>{I.chat(13)}{fmtNum(s.eng.comments)}</span>
-                  <span>{hold ? `You own ${hold.shares}` : `Spotted by ${l.mine ? "you" : "@" + l.scout}`}</span>
+                  <span>{hold ? `You own ${hold.shares}` : `Spotted by ${l.scout === "you" ? "you" : "@" + l.scout}`}</span>
                 </div>
               </div>
             </div>

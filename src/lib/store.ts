@@ -1,25 +1,24 @@
 "use client";
-// Player state lives in this browser only (localStorage) until accounts and a database exist.
+// Player state lives in this browser (localStorage) until accounts and a shared database exist.
 
 import { useCallback, useEffect, useState } from "react";
-import { Listing, START_COINS, DAILY_COINS } from "./game";
+import { Listing, START_COINS } from "./game";
 
 export type Holding = { listingId: string; shares: number; cost: number; call?: number; firstBuyAt: number; founder?: number };
 export type Trade = { listingId: string; side: "buy" | "sell"; shares: number; coins: number; at: number };
-export type MyListing = Omit<Listing, "base" | "peakHour" | "steep" | "growth" | "heat" | "bought">;
 
 export type State = {
   coins: number;
   lastDrip: string;
   holdings: Record<string, Holding>;
   trades: Trade[];
-  myListings: MyListing[];
+  listings: Listing[]; // real posts listed in this browser, with their number snapshots
   paid: Record<string, number>; // listingId -> coins credited at settlement
-  clockH: number; // demo: hours fast-forwarded
 };
 
-const KEY = "hypdaq.v2";
-const EMPTY: State = { coins: START_COINS, lastDrip: "", holdings: {}, trades: [], myListings: [], paid: {}, clockH: 0 };
+// v3: real data only. Earlier keys held sample markets and are ignored.
+const KEY = "hypdaq.v3";
+const EMPTY: State = { coins: START_COINS, lastDrip: "", holdings: {}, trades: [], listings: [], paid: {} };
 
 export function useGameState() {
   const [state, setState] = useState<State>(EMPTY);
@@ -29,6 +28,7 @@ export function useGameState() {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) s = { ...EMPTY, ...JSON.parse(raw) };
+      localStorage.removeItem("hypdaq.v2");
     } catch {}
     setState(s);
     setReady(true);
@@ -43,5 +43,5 @@ export function useGameState() {
     });
   }, []);
   const reset = useCallback(() => update(() => ({ ...EMPTY })), [update]);
-  return { state, update, ready, reset, DAILY_COINS };
+  return { state, update, ready, reset };
 }

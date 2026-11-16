@@ -16,17 +16,17 @@ export const PLATFORMS: Platform[] = [
   {
     id: "reels", label: "Instagram Reels", short: "Reels", unit: "plays",
     metrics: [{ key: "likes", label: "Likes" }, { key: "comments", label: "Comments" }, { key: "shares", label: "Shares" }],
-    source: "Public reel page (plays, likes, comments), checked by cron every few hours", status: "mock",
+    source: "Public embed page (plays, likes, comments), re-read about hourly while the app is open. Instagram often blocks it", status: "ready",
   },
   {
     id: "youtube", label: "YouTube", short: "YouTube", unit: "views",
     metrics: [{ key: "likes", label: "Likes" }, { key: "comments", label: "Comments" }],
-    source: "YouTube Data API (free, exact public counts)", status: "mock",
+    source: "YouTube page or Data API (public views, likes, comments), re-read about hourly", status: "ready",
   },
   {
     id: "x", label: "X posts", short: "X", unit: "engagements",
     metrics: [{ key: "likes", label: "Likes" }, { key: "comments", label: "Replies" }, { key: "shares", label: "Reposts" }],
-    source: "Public post data (likes, reposts, replies), checked by cron. Views aren't public, so X trades on engagements", status: "mock",
+    source: "Public post data (likes, reposts, replies), re-read about hourly. Views aren't public, so X trades on engagements", status: "ready",
   },
 ];
 

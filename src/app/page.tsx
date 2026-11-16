@@ -1,6 +1,6 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { DAILY_COINS, GAME, H, Listing, MAX_SHARES_PER_TRADE, marketListings, shareValue, simulate, ticker } from "@/lib/game";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CHECK_EVERY_H, DAILY_COINS, GAME, H, MAX_SHARES_PER_TRADE, shareValue, ticker } from "@/lib/game";
 import { PlatformId } from "@/lib/platforms";
 import { Snap, snapshot } from "@/lib/market";
 import { useGameState } from "@/lib/store";
@@ -12,13 +12,13 @@ import { ListPost } from "@/components/ListPost";
 import { APPS, Dock, Hub, HubTab, Page, Side, Tape } from "@/components/Shell";
 import { Num } from "@/components/fx";
 const istDay = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(ms));
-const live = (s: Snap) => s.status === "open" || s.status === "closed";
+const live = (s: Snap) => s.status === "open" || s.status === "closed" || s.status === "settling";
 
 function sortFeed(xs: Snap[], sort: Sort) {
   if (sort === "New") return xs.filter((s) => s.status === "open").sort((a, b) => b.l.listedAt - a.l.listedAt);
   if (sort === "Rising") return xs.filter(live).sort((a, b) => b.change - a.change);
   if (sort === "Ended") return xs.filter((s) => !live(s)).sort((a, b) => b.l.listedAt - a.l.listedAt);
-  const score = (s: Snap) => (s.status === "open" ? 20 : 10) + Math.log10(1 + s.growth) * 2 + s.l.heat - s.t / 48 + (s.l.mine ? 5 : 0);
+  const score = (s: Snap) => (s.status === "open" ? 20 : 10) + Math.log10(1 + s.growth) * 2 - s.t / 48;
   return xs.filter(live).sort((a, b) => score(b) - score(a));
 }
 
@@ -43,14 +43,40 @@ export default function Home() {
     const t = setInterval(() => setTick((x) => x + 1), 10_000);
     return () => clearInterval(t);
   }, []);
-  const now = useMemo(() => Date.now() + state.clockH * H, [state.clockH, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const now = useMemo(() => Date.now(), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
   const toast = useCallback((m: string) => { setMsg(m); setTimeout(() => setMsg(null), 2400); }, []);
 
-  const listings: Listing[] = useMemo(() => {
-    if (!mounted) return [];
-    return [...state.myListings.map((m) => simulate(m)), ...marketListings(now)];
-  }, [mounted, now, state.myListings]);
+  const listings = state.listings;
   const snaps = useMemo(() => new Map(listings.map((l) => [l.id, snapshot(l, state, now)] as [string, Snap])), [listings, state, now]);
+
+  // Number checker: while the app is open, re-read each unsettled listing's real numbers about hourly.
+  const tried = useRef(new Map<string, number>());
+  useEffect(() => {
+    if (!ready || !mounted) return;
+    const due = state.listings.filter((l) => {
+      const s = snaps.get(l.id);
+      if (!s || s.status === "settled" || s.status === "void") return false;
+      const last = l.stats[l.stats.length - 1]?.at ?? 0;
+      return now - last >= CHECK_EVERY_H * H && now - (tried.current.get(l.id) ?? 0) >= 10 * 60_000;
+    });
+    for (const l of due.slice(0, 4)) {
+      tried.current.set(l.id, now);
+      fetch(`/api/peek?url=${encodeURIComponent(l.url)}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d?.stats) return;
+          const at = Date.now();
+          update((st) => ({
+            ...st,
+            listings: st.listings.map((x) => x.id !== l.id ? x : {
+              ...x, title: x.title || d.title || x.title, creator: x.creator === "unknown" && d.creator ? d.creator : x.creator,
+              stats: [...x.stats, { at, ...d.stats }],
+            }),
+          }));
+        })
+        .catch(() => {});
+    }
+  }, [ready, mounted, now, state.listings, snaps, update]);
 
   // daily coins + settlement payouts
   useEffect(() => {
@@ -76,17 +102,7 @@ export default function Home() {
     for (const s of snaps.values()) out[s.l.platform].push(s);
     return out;
   }, [snaps]);
-  // the sample catalog repeats captions; show each caption once unless you hold it
-  const dedupe = useCallback((xs: Snap[]) => {
-    const seen = new Set<string>();
-    return xs.filter((s) => {
-      if (s.l.mine || state.holdings[s.l.id]) return true;
-      if (seen.has(s.l.title)) return false;
-      seen.add(s.l.title);
-      return true;
-    });
-  }, [state.holdings]);
-  const feed = useMemo(() => dedupe(sortFeed(byApp[app], sorts[app])), [byApp, app, sorts, dedupe]);
+  const feed = useMemo(() => sortFeed(byApp[app], sorts[app]), [byApp, app, sorts]);
 
   const setSort = (s: Sort) => { setSorts((x) => ({ ...x, [app]: s })); setFocus(null); };
   const goApp = (a: PlatformId) => { setApp(a); setPage(null); setWatch(null); setPost(null); window.scrollTo({ top: 0 }); };
@@ -160,7 +176,6 @@ export default function Home() {
   const sheetSnap = sheet ? snaps.get(sheet.id) : undefined;
   const watchSnap = watch ? snaps.get(watch) : undefined;
   const postSnap = post ? snaps.get(post) ?? null : null;
-  const day = istDay(now);
   const tape = sortFeed([...snaps.values()], "Rising").slice(0, 18);
   const held = Object.keys(state.holdings).filter((id) => { const x = snaps.get(id); return x && live(x); }).length;
 
@@ -178,15 +193,15 @@ export default function Home() {
       {!page && app === "reels" && <Reels feed={feed} sort={sorts.reels} setSort={setSort} state={state} focus={focus} onTrade={trade} onList={() => go("list")} />}
       {!page && app === "youtube" && (watchSnap
         ? <Watch s={watchSnap} next={feed.filter((s) => s.l.id !== watch).slice(0, 12)} state={state} onTrade={(side) => trade(watchSnap.l.id, side)} open={(id) => { setWatch(id); window.scrollTo({ top: 0 }); }} back={() => setWatch(null)} />
-        : <YouTubeHome items={feed} sort={sorts.youtube} setSort={setSort} open={(id) => { setWatch(id); window.scrollTo({ top: 0 }); }} />)}
+        : <YouTubeHome items={feed} sort={sorts.youtube} setSort={setSort} open={(id) => { setWatch(id); window.scrollTo({ top: 0 }); }} onList={() => go("list")} />)}
       {!page && app === "x" && (
         <XFeed items={feed} sort={sorts.x} setSort={setSort} state={state} detail={postSnap}
-          open={(id) => { setPost(id); window.scrollTo({ top: 0 }); }} back={() => setPost(null)} onTrade={trade} />
+          open={(id) => { setPost(id); window.scrollTo({ top: 0 }); }} back={() => setPost(null)} onTrade={trade} onList={() => go("list")} />
       )}
       {page === "list" && <ListPost initial={prefill} all={listings} state={state} now={now} update={update} onListed={(id) => { toast("Listed. You hold 20 founder shares."); setPending(id); }} />}
-      {page === "you" && <Hub tab={hubTab} setTab={setHubTab} state={state} snaps={snaps} day={day} now={now} update={update} reset={reset} open={openListing} />}
+      {page === "you" && <Hub tab={hubTab} setTab={setHubTab} state={state} snaps={snaps} reset={reset} open={openListing} />}
         </main>
-        <Dock state={state} snaps={snaps} day={day} open={openListing} openHub={openHub} onQuickList={(l) => { setPrefill(l); go("list"); }} />
+        <Dock state={state} snaps={snaps} open={openListing} openHub={openHub} onQuickList={(l) => { setPrefill(l); go("list"); }} />
       </div>
 
       <nav className="bottom-nav">
